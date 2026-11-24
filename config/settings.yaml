@@ -1,0 +1,87 @@
+# ============================================================
+#  FUNDING HARVEST — CẤU HÌNH CHIẾN LƯỢC
+#  Bám theo docs/ke-hoach-funding-rate.md v2.2 (§15.2)
+# ============================================================
+
+capital:
+  total_usd: 500
+  spot_usd: 235
+  futures_usd: 265
+  margin_usd: 235
+  buffer_usd: 30
+  leverage: 1
+  margin_mode: CROSS
+  position_mode: ONE_WAY
+  coins: 3
+  notional_per_leg_usd: 235
+  notional_per_coin_usd: 78
+
+universe:
+  quote: USDT
+  contract: PERPETUAL
+  status: TRADING
+  volume_min_usd: 5000000
+  exclude_symbols:
+    - BTCUSDT
+    - ETHUSDT
+
+filter:
+  apr_basis: forward
+  apr_min: 20
+  apr_max: 60
+  excess_apr_min: 15
+  pos_ratio_14d_min: 0.85
+  zero_rate_14d_max: 0.10
+  cv_14d_max: 2.0
+  decay_7d_vs_14d_min: 0.6
+  slippage_max: 0.2
+  net_apr_14d_min: 20
+
+costs:
+  spot_fee_taker: 0.00075      # 0,075% (taker + BNB)
+  futures_fee_taker: 0.00045   # 0,045% (taker + BNB)
+  fee_roundtrip: 0.0024        # 2 leg × vào + ra
+  slippage_roundtrip: 0.0011
+  cost_roundtrip: 0.0035       # c = 0,35% → drag 9,13 điểm APR/năm
+  baseline_apr: 10.95          # I = 0,01%/8h, năm hóa
+
+risk:
+  leverage_max: 1
+  size_per_coin_max: 0.16
+  aggregate_exposure_max: 0.60
+  max_coins: 3
+  max_order_notional_usd: 125
+  dd_kill: 0.20
+  margin_buffer_min: 0.06
+  phase2_leverage: 2           # chỉ sau gate §12.4
+
+exit:
+  predicted_fr_vs_trailing: 0.5
+  oi_drop_1h: -0.15
+  basis_sigma: 3
+  price_move_1h: 0.15
+  vol_spike: 2.5
+
+automation:
+  mode: L3_fully_automated_supervised
+  manual_order_confirmation: false
+  human_override_kill_switch: false
+  resume_after_p1_requires_human: true
+  heartbeat_seconds: 30
+  reconcile_seconds: 60
+  deadman_after_seconds: 300
+  dry_run_days: 7
+  alert_test_days: 7
+  max_order_notional_ratio: 0.25
+  deploy_freeze_minutes_before_funding: 120
+
+screener:
+  lookback_days: 14
+  short_lookback_days: 7
+  funding_history_limit: 120
+  max_symbols: 120
+  request_workers: 6
+
+api:
+  recv_window: 5000
+  timeout_seconds: 15

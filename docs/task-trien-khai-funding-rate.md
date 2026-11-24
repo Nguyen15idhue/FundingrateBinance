@@ -1,0 +1,735 @@
+# TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
+
+**Mã task:** TASK-FR-001  
+**Phiên bản:** 1.0  
+**Ngày tạo:** 24/11/2026  
+**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.2**  
+**Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
+**Người thực hiện:** ____________________  
+**Trạng thái tổng:** ⬜ Chưa bắt đầu
+
+---
+
+## 0. QUY ƯỚC
+
+### 0.1 Ký hiệu trạng thái
+
+| Ký hiệu | Nghĩa |
+|---|---|
+| ⬜ | Chưa chạy |
+| 🟡 | Đang chạy / chờ kết quả |
+| ✅ | Pass |
+| ❌ | Fail — phải sửa và chạy lại |
+| ⏭️ | Bỏ qua có lý do (ghi rõ) |
+| 🔒 | Blocked — không được qua phase |
+
+### 0.2 Cách ghi kết quả test
+
+- Mỗi test phải có **bằng chứng**: log, ảnh chụp màn hình, commit hash, hoặc file report.
+- Không ghi "OK" chung chung. Ghi **số liệu thực tế** so với kỳ vọng.
+- Test fail → ghi nguyên nhân, người sửa, ngày sửa, test lại.
+- Không chuyển phase khi còn test ❌ chưa đóng.
+
+### 0.3 Bảng tiến độ tổng
+
+| Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
+|---|---|---|---|---|---|---|
+| 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ⬜ | | | |
+| 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ⬜ | | | |
+| 2 | B1a — Ingest + Feature + Screener | 4–6 ngày | ⬜ | | | |
+| 3 | B1b — Executor + Reconciler + Watchdog | 5–7 ngày | ⬜ | | | |
+| 4 | B1c — Testnet + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
+| 5 | R1 — Live $500, 2 coin | 2 tuần | ⬜ | | | |
+| 6 | R2 — Live $500, 3 coin | 3–4 tuần | ⬜ | | | |
+| 7 | G — Gate 60–90 ngày | 1 tuần | ⬜ | | | |
+| 8 | Scale — $1k / $2k / $5k | Tùy gate | ⬜ | | | |
+
+> Tổng trước khi có tiền thật: **~3–4 tuần** (Phase 0 → 4). Xem §11 kế hoạch.
+
+---
+
+## PHASE 0 — CHUẨN BỊ TÀI KHOẢN & MÔI TRƯỜNG
+
+**Mục tiêu:** có tài khoản, ví, quyền API, hạ tầng và kênh cảnh báo đúng cấu hình trước khi viết code.
+
+**Tham chiếu kế hoạch:** §4.1 (phí), §7.2 (dữ liệu), §8.1 (giám sát), §10.2 (margin cross-wallet), §15.2 (thresholds).
+
+**Giải thích cơ bản:** Hệ chạy L3 nên mọi sai cấu hình ở đây sẽ được bot thực thi tự động. Đặc biệt: sai margin mode → buffer không bảo vệ được leg short; sai quyền API → rủi ro bảo mật; thiếu alert → "giám sát" thành giả định.
+
+### 0.1 Các bước thực hiện
+
+- [ ] **0.1.1** Mở/kiểm tra tài khoản Binance, bật 2FA, anti-phishing code.
+- [ ] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP.
+- [ ] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập.
+- [ ] **0.1.4** Nạp **$500**; quy đổi USDT; phân bổ đúng:
+  - Spot wallet: **$235**
+  - Futures wallet: **$265** (margin $235 + buffer $30)
+- [ ] **0.1.5** Set Futures: **Cross margin**, **1x**, **One-way mode**.
+- [ ] **0.1.6** Mua **BNB riêng** (ngoài $500): $10–15 mỗi ví Spot và Futures để hưởng phí giảm.
+- [ ] **0.1.7** Xác nhận fee tier VIP0 + BNB discount (spot 0,075%; futures taker 0,045%).
+- [ ] **0.1.8** Tạo tài khoản **Testnet Futures** + API key testnet.
+- [ ] **0.1.9** Dựng repo theo cấu trúc đề xuất; `.env` nằm trong `.gitignore`.
+- [ ] **0.1.10** Cấu hình alert: Telegram bot + SMS/email; test bắn thử.
+- [ ] **0.1.11** Cấu hình hạ tầng: máy chạy 24/7 + **UPS ≥ 30 phút** + **4G failover** + **dead-man ping ngoài** (dịch vụ ping miễn phí hoặc VPS nhỏ).
+- [ ] **0.1.12** Đồng bộ giờ NTP; kiểm tra drift.
+- [ ] **0.1.13** Chốt **alert severity**: P1 (phải xử lý ≤15 phút), P2 (≤24h), P3 (theo tuần).
+
+### 0.2 Cấu trúc repo đề xuất
+
+```text
+funding-bot/
+├── config/                 # YAML theo §15.2, không chứa secret
+├── src/
+│   ├── ingest/             # funding, premium, ticker, OI, depth
+│   ├── features/           # APR, excess, CV, decay, score
+│   ├── allocator/          # chọn coin, size, direction
+│   ├── risk/               # pre-trade gate, kill switch
+│   ├── executor/           # 2 leg, retry, rollback
+│   ├── reconciler/         # đối soát API ↔ state
+│   ├── watchdog/           # heartbeat, dead-man
+│   └── report/             # PnL attribution, daily report
+├── backtest/
+├── tests/
+├── data/                   # DB, parquet (gitignored)
+├── logs/                   # audit log (gitignored)
+├── reports/                # report ngày/tuần (gitignored)
+├── .env                    # gitignored
+└── README.md
+```
+
+### 0.3 Kết quả cần đạt
+
+- [ ] Ảnh chụp màn hình: Spot $235, Futures $265, Cross, 1x.
+- [ ] API key chính **không** có quyền rút tiền; key read-only **không** đặt được lệnh.
+- [ ] Alert test tới điện thoại trong < 10 giây.
+- [ ] Bot chạy được trên máy/UPS/4G khi rút điện và rút mạng WAN.
+- [ ] Không có secret nào trong git (đã kiểm tra `git grep`).
+
+### 0.4 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P0-T01 | Quyền rút bị tắt | Gọi API withdrawal bằng key chính | 401/403 | ⬜ | |
+| P0-T02 | Key read-only không trade | Gọi API đặt lệnh bằng key read-only | 401/403 | ⬜ | |
+| P0-T03 | Số dư đúng | GET balance Spot/Futures | 235 / 265 USDT | ⬜ | |
+| P0-T04 | Cross + 1x | Kiểm tra app + API `positionRisk` | Cross, leverage 1 | ⬜ | |
+| P0-T05 | BNB discount | Xem fee tier / thử lệnh nhỏ | Spot 0,075%; Fut 0,045% | ⬜ | |
+| P0-T06 | Alert Telegram | Bắn test message | Nhận < 10s | ⬜ | |
+| P0-T07 | Alert SMS/email | Bắn test message | Nhận < 60s | ⬜ | |
+| P0-T08 | Time drift | So `time` API với local | Lệch < 1s | ⬜ | |
+| P0-T09 | UPS failover | Rút điện nguồn | Máy không tắt, bot vẫn chạy | ⬜ | |
+| P0-T10 | 4G failover | Rút WAN | Bot vẫn kết nối trong < 30s | ⬜ | |
+| P0-T11 | Secret không vào git | `git grep -i "api_key\|secret"` | 0 kết quả | ⬜ | |
+| P0-T12 | Testnet hoạt động | Đặt/hủy 1 lệnh testnet | Khớp bình thường | ⬜ | |
+
+### 0.5 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày chạy | |
+| Người chạy | |
+| Pass / Fail | __ / 12 |
+| Bằng chứng (link log/ảnh/commit) | |
+| Quyết định | ⬜ Đạt phase 0 / ⬜ Chạy lại / ⬜ Dừng |
+
+### 0.6 Ghi chú & rủi ro
+
+- **BNB phải nằm ngoài $500.** Nếu trừ vào buffer, buffer còn ~$15 → vi phạm ngưỡng 6%, phải giảm notional.
+- **Cross margin là bắt buộc.** Isolated + không auto-add margin → buffer không cứu được leg short (§10.2).
+- **Không dùng API key có quyền rút** cho bot, kể cả khi tiện.
+- **Không chạy bot trên máy không UPS/4G** — mất kết nối dài = mù vị thế (§12.3).
+
+---
+
+## PHASE 1 — B0: THU DỮ LIỆU & BACKTEST $500 / 1X
+
+**Mục tiêu:** chứng minh chiến lược còn dương sau phí ở đúng cấu hình $500/1x, trước khi bỏ công xây automation.
+
+**Tham chiếu kế hoạch:** §3 (bài học dữ liệu thật), §4 (chi phí & break-even), §5 (bộ lọc & scoring), §6.4 (mô phỏng $500), §11 B0, §12.1.
+
+**Giải thích cơ bản:** Backtest không phải để "thấy lãi đẹp", mà để (1) xác nhận edge sau phí còn dương, (2) đo phân phối tháng/DD, (3) kiểm tra bộ lọc có chọn được coin không trong regime hiện tại. Cấu hình phải đúng: 3 coin, $78/leg, 1x, fee P2, slippage 0,1%/side.
+
+### 1.1 Các bước thực hiện
+
+- [ ] **1.1.1** Ingest 6–12 tháng dữ liệu: `fundingRate`, `premiumIndexKlines`, `klines`, `ticker/24hr`, `exchangeInfo`, `openInterestHist`, `depth`.
+- [ ] **1.1.2** Chuẩn hóa: timestamp UTC, interval 1h/2h/4h/8h, tách **baseline 10,95%/năm** và **excess**.
+- [ ] **1.1.3** Implement đúng bộ lọc §5.2: forward APR 20–60%, excess ≥15%, pos ≥0,85, zero ≤0,10, CV ≤2, decay 7d/14d ≥0,6, net ≥20%, slippage ≤0,2%/side, volume ≥$5M.
+- [ ] **1.1.4** Implement score §5.4: `net_APR × min(1,1/CV) × min(1, volume/$20M)`.
+- [ ] **1.1.5** Mô phỏng: 3 coin, $78/leg, 1x, spot $235 + margin $235 + buffer $30; fee 0,24% + slippage 0,11% (c=0,35%).
+- [ ] **1.1.6** Exit theo §10.3 (flip, decay, OI, basis, giá, venue, DD) + rebalance hàng tuần.
+- [ ] **1.1.7** Xuất báo cáo: phân phối PnL tháng, DD, hit rate, **deployment rate** (% thời gian có vốn trong lệnh), turnover, fee drag, break-even days.
+- [ ] **1.1.8** Chạy stress: basis shock 2% và 5%; funding giảm 50%; slippage ×2.
+- [ ] **1.1.9** So sánh với snapshot thực tế: bộ lọc hôm nay ra bao nhiêu ứng viên? (Tham chiếu báo cáo: 4 mã pass — EVAA, AVAAI, PIEVERSE, PHAROS.)
+
+### 1.2 Kết quả cần đạt
+
+- [ ] Net APR **≥ 9% trên vốn** sau chiết khấu quy mô nhỏ.
+- [ ] **≥ 70% tháng dương**; không có tháng nào < −3% (ngoài tail shock).
+- [ ] DD stress **≤ 4%** vốn.
+- [ ] Deployment rate ≥ 50% thời gian (nếu thấp hơn, ghi rõ và điều chỉnh kỳ vọng lợi nhuận).
+- [ ] Bộ lọc trả về **≥ 2 ứng viên** trong ≥ 50% số ngày; nếu không, ghi nhận "thị trường nghèo funding".
+- [ ] Có báo cáo tái lập được bằng 1 lệnh, cùng seed/dữ liệu.
+
+### 1.3 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P1-T01 | Không lookahead | Shift tín hiệu 1 kỳ; so sánh | Kết quả không đổi bất thường | ⬜ | |
+| P1-T02 | Chuẩn hóa interval | So 4h/8h/1h cùng symbol | APR năm hóa khớp ±1% | ⬜ | |
+| P1-T03 | Baseline/excess | Tính lại 1 symbol tay | Baseline ~10,95%; excess khớp | ⬜ | |
+| P1-T04 | Phí & slippage | So c với 0,35% | Drag 9,13pp APR | ⬜ | |
+| P1-T05 | Min notional & rounding | Mô phỏng $78/leg | Không lệnh nào < min | ⬜ | |
+| P1-T06 | Survivorship/delist | Thêm symbol đã delist | Không crash, xử lý đúng | ⬜ | |
+| P1-T07 | Missing data | Cắt 10% dữ liệu | Không lỗi silent, có cảnh báo | ⬜ | |
+| P1-T08 | Timezone | So timestamp UTC | Khớp fundingTime | ⬜ | |
+| P1-T09 | Tái lập snapshot | Chạy filter ngày 24/11 | Ra 4 mã pass như báo cáo | ⬜ | |
+| P1-T10 | Stress basis 2%/5% | Chạy 2 kịch bản | DD ≤4% / ghi nhận tail | ⬜ | |
+| P1-T11 | Funding giảm 50% | Chạy lại | Net APR vẫn >0 | ⬜ | |
+| P1-T12 | Slippage ×2 | Chạy lại | Net APR >0, ghi rõ biên | ⬜ | |
+
+### 1.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày chạy | |
+| Người chạy | |
+| Pass / Fail | __ / 12 |
+| Net APR / tháng | |
+| Deployment rate | |
+| DD stress | |
+| Bằng chứng (report, commit) | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ⬜ Dừng |
+
+### 1.5 Ghi chú & rủi ro
+
+- **Không tối ưu tham số để đẹp backtest.** Nếu phải nới cap 60% hoặc hạ net 20% mới có lãi, ghi rõ đó là quyết định rủi ro.
+- **Backtest là trần lý thuyết** (§6.3): survivorship, một vài regime, không mô hình liquidation/ADL/delist.
+- **Deployment rate thấp là kết quả hợp lệ**, không phải lỗi. Thị trường funding hiện tại median ~4,2%/năm → đứng ngoài là bình thường.
+- Nếu Phase 1 fail: **không** chuyển sang xây automation. Quay lại bộ lọc/cấu hình.
+
+---
+
+## PHASE 2 — B1a: INGEST + FEATURE + SCREENER
+
+**Mục tiêu:** có service chạy 24/7, kéo dữ liệu sạch, tính điểm và xuất danh sách ứng viên giống hệt backtest.
+
+**Tham chiếu kế hoạch:** §5 (bộ lọc), §6 (backtest), §7.1–7.3 (kiến trúc & API), §15.2 (thresholds).
+
+**Giải thích cơ bản:** Đây là "mắt" của hệ. Nếu screener lệch backtest, mọi bước sau vô nghĩa. Yêu cầu quan trọng nhất: **parity** giữa kết quả live và kết quả backtest trên cùng thời điểm.
+
+### 2.1 Các bước thực hiện
+
+- [ ] **2.1.1** Collector REST + WS: funding, premium, ticker, OI, depth, exchangeInfo (§7.3).
+- [ ] **2.1.2** Lưu DB (SQLite/Postgres) + raw snapshot; ghi `ingested_at`, `source`.
+- [ ] **2.1.3** Feature engine: APR 7d/14d, forward, excess, pos_ratio, zero_rate, CV, decay 7d/14d, score.
+- [ ] **2.1.4** Screener: áp §5.2, xuất JSON + bảng Markdown + lưu DB.
+- [ ] **2.1.5** Xử lý interval thay đổi giữa chừng (re-normalize toàn bộ chuỗi).
+- [ ] **2.1.6** Backoff/retry khi 429/5xx; không retry mù.
+- [ ] **2.1.7** Report ngày: top ứng viên, lý do loại, trạng thái dữ liệu.
+- [ ] **2.1.8** Healthcheck: độ mới dữ liệu, số symbol, lỗi ingest.
+
+### 2.2 Kết quả cần đạt
+
+- [ ] Screener chạy mỗi 1–5 phút, không lỗi quá 5 phút.
+- [ ] Kết quả **khớp 100%** với script backtest trên cùng snapshot.
+- [ ] Không có gap dữ liệu > 2 kỳ funding cho symbol trong universe.
+- [ ] Restart service không mất state, không nhân đôi dữ liệu.
+- [ ] Report ngày đọc được bởi người không mở code.
+
+### 2.3 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P2-T01 | Parity backtest | So danh sách live vs backtest | Khớp 100% | ⬜ | |
+| P2-T02 | Interval change | Symbol đổi 4h→1h | APR năm hóa không nhảy | ⬜ | |
+| P2-T03 | Negative funding | Chọn symbol âm | Bị loại đúng rule | ⬜ | |
+| P2-T04 | Zero funding | Symbol zero-rate cao | Bị loại đúng rule | ⬜ | |
+| P2-T05 | Delisted symbol | Symbol ngừng giao dịch | Bỏ khỏi universe, không crash | ⬜ | |
+| P2-T06 | 429/5xx | Giả lập rate limit | Backoff, không mất dữ liệu | ⬜ | |
+| P2-T07 | Restart | Kill service giữa chừng | Không duplicate, resume đúng | ⬜ | |
+| P2-T08 | DB đầy/khóa | Giả lập DB locked | Cảnh báo, không silent fail | ⬜ | |
+| P2-T09 | Clock skew | Đổi giờ máy +30s | Cảnh báo / tự sync | ⬜ | |
+| P2-T10 | Thiếu depth | Symbol book mỏng | Không chọn hoặc cảnh báo | ⬜ | |
+| P2-T11 | Latency | Đo từ ingest → screener | < 5 phút | ⬜ | |
+| P2-T12 | Report ngày | Mở file report | Đủ top, lý do loại, healthcheck | ⬜ | |
+
+### 2.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày chạy | |
+| Người chạy | |
+| Pass / Fail | __ / 12 |
+| Số symbol universe | |
+| Số ứng viên pass / ngày | |
+| Bằng chứng (log, report) | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ⬜ Dừng |
+
+### 2.5 Ghi chú & rủi ro
+
+- **Parity là điều kiện cứng.** Lệch > 0 ứng viên phải tìm nguyên nhân trước khi tiếp tục.
+- Baseline 10,95% **không trừ khỏi P&L**, chỉ dùng cho excess/score (§5.2 note).
+- Nếu universe < 3 ứng viên nhiều ngày: ghi nhận, không hạ chuẩn để có lệnh.
+
+---
+
+## PHASE 3 — B1b: EXECUTOR + RECONCILER + WATCHDOG
+
+**Mục tiêu:** bot tự vào/ra 2 leg an toàn, tự đối soát, tự dừng khi bất thường — không cần người bấm lệnh.
+
+**Tham chiếu kế hoạch:** §7.1 (7 khối + Watchdog), §8 (L3, lớp giám sát, runbook), §8.2 (runbook), §8.3 (điều kiện bật live), §10.3 (kill switch), §11 B1.
+
+**Giải thích cơ bản:** Rủi ro lớn nhất là **lệch chân** (leg 1 khớp, leg 2 fail) và **state lệch sàn**. Vì vậy executor phải idempotent, có rollback; reconciler phải chạy độc lập; watchdog phải phát hiện bot chết và báo ngay.
+
+### 3.1 Các bước thực hiện
+
+- [ ] **3.1.1** State machine: `IDLE → ENTERING → HEDGED → EXITING → CLOSED` + `ERROR`.
+- [ ] **3.1.2** Order manager: `clientOrderId` idempotent; precision/qty step từ `exchangeInfo`; check min notional trước khi gửi.
+- [ ] **3.1.3** Executor 2 leg: gửi spot trước hay perp trước (chốt 1 chiều), retry ≤ 3 với giá giới hạn, rollback nếu leg 2 fail.
+- [ ] **3.1.4** Hard cap trong code: max order notional = 25% vốn ($125); max coin = 3; leverage = 1x; max slippage.
+- [ ] **3.1.5** Reconciler: mỗi 60s so position/balance API ↔ state; lệch > 1% → dừng vào mới + P1.
+- [ ] **3.1.6** Watchdog: heartbeat 30s; mất > 2 phút alert; > 5 phút chặn vào mới + dead-man.
+- [ ] **3.1.7** Buffer manager: auto transfer Spot ↔ Futures khi buffer < 50% nhu cầu; không transfer nếu đang có lệnh treo.
+- [ ] **3.1.8** Kill switch theo §10.3; người không override được.
+- [ ] **3.1.9** Audit log bất biến: order, fill, retry, override, transfer, alert.
+- [ ] **3.1.10** Dashboard + alert P1/P2/P3; report ngày.
+- [ ] **3.1.11** Cơ chế **resume sau P1 cần người xác nhận** (`resume_after_p1_requires_human: true`).
+
+### 3.2 Kết quả cần đạt
+
+- [ ] Không có lệnh trùng khi retry/timeout.
+- [ ] Leg 2 fail → leg 1 được đóng trong ≤ 60 giây, có log.
+- [ ] Reconcile diff = 0 liên tục 24h trên testnet.
+- [ ] Kill switch + dead-man hoạt động trong ≤ 5 phút kể từ sự cố giả lập.
+- [ ] Không có đường nào để bot mở > $125/order hoặc > 3 coin.
+- [ ] Mọi alert P1 tới điện thoại trong < 15 giây.
+
+### 3.3 Checklist test (matrix bắt buộc)
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P3-T01 | Leg 2 fail | Giả lập reject leg perp | Đóng leg spot, state ERROR, P1 | ⬜ | |
+| P3-T02 | Partial fill | Khớp 50% | Retry phần còn lại hoặc rollback | ⬜ | |
+| P3-T03 | Timeout | Không phản hồi 10s | Không gửi trùng; query order | ⬜ | |
+| P3-T04 | API 429 | Giả lập rate limit | Backoff, không retry mù | ⬜ | |
+| P3-T05 | API 5xx | Giả lập 500 | Retry có giới hạn + alert | ⬜ | |
+| P3-T06 | Mất mạng | Ngắt WAN 2 phút | Heartbeat alert; không lệnh mới | ⬜ | |
+| P3-T07 | Mất mạng 6 phút | Ngắt WAN 6 phút | Dead-man chặn/flatten theo config | ⬜ | |
+| P3-T08 | Sai số dư | Giảm balance | Không gửi lệnh; P1 | ⬜ | |
+| P3-T09 | Precision/qty | Coin bước giá thô | Qty làm tròn đúng, không reject | ⬜ | |
+| P3-T10 | Min notional | Size < min | Chặn trước khi gửi | ⬜ | |
+| P3-T11 | Lệnh trùng | Retry cùng clientOrderId | Chỉ 1 lệnh trên sàn | ⬜ | |
+| P3-T12 | Reconcile lệch | Sửa state nội bộ | Dừng vào mới + P1 ≤ 60s | ⬜ | |
+| P3-T13 | Kill switch flip | Đưa FR flip 2 kỳ | Đóng coin đúng rule | ⬜ | |
+| P3-T14 | Kill switch giá | Giá move 15%/1h | Giảm/đóng đúng rule | ⬜ | |
+| P3-T15 | Kill switch DD | Giảm vốn 20% | Kill toàn hệ | ⬜ | |
+| P3-T16 | Buffer transfer | Buffer < ngưỡng | Auto transfer đúng, không lặp | ⬜ | |
+| P3-T17 | Restart giữa vị thế | Kill bot khi HEDGED | Khôi phục đúng state, không mở thêm | ⬜ | |
+| P3-T18 | DB down | Tắt DB | Bot dừng an toàn, không mất state | ⬜ | |
+| P3-T19 | Clock skew | Lệch giờ 30s | Không gửi lệnh sai timestamp | ⬜ | |
+| P3-T20 | Resume sau P1 | Sau sự cố | Không tự mở lại khi chưa xác nhận | ⬜ | |
+
+### 3.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày chạy | |
+| Người chạy | |
+| Pass / Fail | __ / 20 |
+| Reconcile 24h | diff = 0? |
+| Alert P1 latency | |
+| Bằng chứng (log, video, commit) | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ⬜ Dừng |
+
+### 3.5 Ghi chú & rủi ro
+
+- **Không dùng retry mù.** Mỗi retry phải query trạng thái lệnh trước.
+- **Không sửa tay lệnh bot đang chạy** — chỉ kill/blacklist (§11 luật cứng).
+- **Reconciler phải chạy process riêng**, không chung vòng lặp executor.
+- Nếu bất kỳ test P3-T01/P3-T05/P3-T12 fail → **không** sang Phase 4.
+
+---
+
+## PHASE 4 — B1c: TESTNET + DRY-RUN 7 NGÀY
+
+**Mục tiêu:** chạy đúng luồng trên testnet và dry-run dữ liệu thật 7 ngày, đo slippage/fill trước khi dùng tiền thật.
+
+**Tham chiếu kế hoạch:** §8.3 (điều kiện bật live), §11 B1, §12.5 (ngân sách thiệt hại).
+
+**Giải thích cơ bản:** Testnet kiểm tra kỹ thuật; dry-run kiểm tra quyết định trên thị trường thật mà không gửi lệnh. Đây là lần cuối có thể sửa miễn phí.
+
+### 4.1 Các bước thực hiện
+
+- [ ] **4.1.1** Chạy toàn bộ luồng trên testnet: vào 2 leg, rollback, exit, transfer.
+- [ ] **4.1.2** Chạy **dry-run ≥ 7 ngày** trên dữ liệu thật: bot quyết định nhưng **không gửi lệnh**; ghi giá "nếu vào thì khớp nào".
+- [ ] **4.1.3** Ghi log từng episode giấy: coin, thời điểm, size, giá dự kiến, giá thực tế tại thời điểm đó, funding dự kiến.
+- [ ] **4.1.4** Đo slippage giả định vs model 0,1%/side.
+- [ ] **4.1.5** Diễn tập: kill switch, dead-man, restart giữa vị thế, mất mạng.
+- [ ] **4.1.6** So sánh danh sách dry-run với backtest cùng ngày.
+
+### 4.2 Kết quả cần đạt
+
+- [ ] ≥ **10 episode giấy** hoặc ≥ 7 ngày chạy liên tục (tùy cái nào đến trước).
+- [ ] Slippage giả định **≤ 0,15%/side** ở ≥ 80% episode.
+- [ ] Uptime ≥ 99% trong 7 ngày.
+- [ ] **0 sự cố P1**; mọi P2 có root-cause.
+- [ ] Kill switch + dead-man diễn tập thành công.
+- [ ] Reconcile diff = 0 toàn bộ 7 ngày.
+
+### 4.3 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P4-T01 | Dry-run đủ ngày | Log ngày | ≥ 7 ngày | ⬜ | |
+| P4-T02 | Số episode giấy | Đếm log | ≥ 10 | ⬜ | |
+| P4-T03 | Slippage | So giá dự kiến/thực tế | ≤ 0,15%/side, ≥80% | ⬜ | |
+| P4-T04 | Uptime | Healthcheck | ≥ 99% | ⬜ | |
+| P4-T05 | P1 count | Log alert | 0 | ⬜ | |
+| P4-T06 | Kill switch drill | Giả lập trigger | Đóng đúng, ≤ 60s | ⬜ | |
+| P4-T07 | Dead-man drill | Ngắt heartbeat | Chặn/flatten đúng, ≤ 5 phút | ⬜ | |
+| P4-T08 | Restart giữa vị thế | Kill process | Khôi phục đúng | ⬜ | |
+| P4-T09 | Parity backtest | So cùng ngày | Khớp danh sách | ⬜ | |
+| P4-T10 | Alert test | Bắn P1/P2 | Nhận đúng kênh | ⬜ | |
+| P4-T11 | Audit log | Kiểm 1 episode | Đủ order/fill/retry | ⬜ | |
+| P4-T12 | Báo cáo ngày | Mở report | Đủ PnL, funding, lỗi | ⬜ | |
+
+### 4.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày chạy | |
+| Người chạy | |
+| Pass / Fail | __ / 12 |
+| Số episode giấy | |
+| Slippage TB / p90 | |
+| Bằng chứng (log, report) | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ⬜ Dừng |
+
+### 4.5 Ghi chú & rủi ro
+
+- Dry-run **không được** gửi lệnh thật; kiểm tra API key đang ở chế độ read-only hoặc testnet.
+- Nếu slippage thực tế > 0,2%/side → quay lại chọn coin thanh khoản hơn, không hạ chuẩn.
+- Nếu uptime < 99% → sửa hạ tầng trước khi live.
+
+---
+
+## PHASE 5 — R1: LIVE $500, 2 COIN
+
+**Mục tiêu:** xác nhận ngoài đời với tiền thật, quy mô nhỏ, 2 coin, 1x, L3 hoàn toàn.
+
+**Tham chiếu kế hoạch:** §11 R1, §13 (checklist vận hành), §10 (risk & kill switch), §12.5 (ngân sách thiệt hại).
+
+**Giải thích cơ bản:** Đây là lần đầu bot dùng tiền thật. Mục tiêu **không phải lãi**, mà là: khớp lệnh đúng, funding thực nhận đúng kỳ vọng, không lỗi vận hành. Hai tuần đầu người trực 24/7.
+
+### 5.1 Các bước thực hiện
+
+- [ ] **5.1.1** Bật bot với **2 coin × $78/leg**, 1x, 3 slot còn 1 để trống.
+- [ ] **5.1.2** Trực 24/7 trong 14 ngày; kiểm tra checklist ngày §13.
+- [ ] **5.1.3** Ghi nhận từng kỳ funding thực nhận vs dự kiến.
+- [ ] **5.1.4** Kiểm tra reconcile mỗi ngày; lưu bằng chứng.
+- [ ] **5.1.5** Đo slippage thực từng lệnh.
+- [ ] **5.1.6** Review tuần: PnL attribution, phí, funding, lỗi.
+- [ ] **5.1.7** **Không** thêm coin, **không** tăng size, **không** bật 2x trong phase này.
+
+### 5.2 Kết quả cần đạt
+
+- [ ] ≥ 10 ngày live, ≥ 1 chu kỳ vào/ra hoàn chỉnh.
+- [ ] Funding thực nhận lệch kỳ vọng **< 20%**.
+- [ ] **0 sự cố P1**; mọi P2 có root-cause trong 48h.
+- [ ] Reconcile diff = 0 mỗi ngày.
+- [ ] DD thực **< 5%** vốn.
+- [ ] Không có lần nào phải sửa tay lệnh.
+- [ ] Slippage thực ≤ 0,2%/side.
+
+### 5.3 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P5-T01 | Entry end-to-end | Lần vào đầu tiên | 2 leg khớp, delta-neutral | ⬜ | |
+| P5-T02 | Funding thực | So payment với dự kiến | Lệch < 20% | ⬜ | |
+| P5-T03 | Exit end-to-end | Lần ra đầu tiên | Đóng đủ 2 leg, không treo | ⬜ | |
+| P5-T04 | Reconcile ngày | So API ↔ state | diff = 0 | ⬜ | |
+| P5-T05 | Buffer transfer | Khi buffer < ngưỡng | Tự nạp đúng | ⬜ | |
+| P5-T06 | Slippage | Log từng fill | ≤ 0,2%/side | ⬜ | |
+| P5-T07 | Alert thực | Sự cố/giả lập | Nhận đúng kênh | ⬜ | |
+| P5-T08 | Kill switch thực | Trigger nhỏ (nếu an toàn) | Đóng đúng, có log | ⬜ | |
+| P5-T09 | DD | Theo dõi ngày | < 5% | ⬜ | |
+| P5-T10 | Không sửa tay | Audit log | 0 manual order | ⬜ | |
+
+### 5.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày bắt đầu / kết thúc | |
+| Người trực | |
+| Pass / Fail | __ / 10 |
+| Funding thực / dự kiến | |
+| Slippage TB | |
+| P1 / P2 count | |
+| Bằng chứng (report, ảnh) | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy tiếp / ⬜ Dừng |
+
+### 5.5 Ghi chú & rủi ro
+
+- Ngân sách "học phí" 3 tháng: **$50–150**. Chạm ngưỡng → dừng, review, **không nạp thêm để gỡ**.
+- Nếu funding flip liên tục: giảm size hoặc đứng ngoài, không cố giữ.
+- Nếu bot lỗi P1: dừng bot, reconcile tay, chỉ resume sau khi root-cause.
+
+---
+
+## PHASE 6 — R2: LIVE $500, 3 COIN
+
+**Mục tiêu:** mở đủ 3 slot theo cấu hình chuẩn, duy trì L3 ổn định 3–4 tuần.
+
+**Tham chiếu kế hoạch:** §11 R2, §12.2, §10.1 (risk budget), §13.
+
+**Giải thích cơ bản:** Tăng từ 2 lên 3 coin làm tăng notional từ $156 lên $235, gần đúng cấu hình. Đây là mức vốn tối đa của $500; không tăng thêm.
+
+### 6.1 Các bước thực hiện
+
+- [ ] **6.1.1** Chỉ thêm coin thứ 3 khi nó pass đủ §5.2 và score xếp trên coin dự bị.
+- [ ] **6.1.2** Kiểm tra correlation/tổng exposure ≤ 60% notional.
+- [ ] **6.1.3** Theo dõi 3 coin trong 3–4 tuần; rebalance tuần.
+- [ ] **6.1.4** Nếu thiếu ứng viên: giữ 2 coin hoặc tiền mặt, **không hạ chuẩn**.
+- [ ] **6.1.5** Chuẩn bị hồ sơ gate Phase 7.
+
+### 6.2 Kết quả cần đạt
+
+- [ ] 3 coin chạy đồng thời ≥ 14 ngày (hoặc ghi rõ lý do không đủ ứng viên).
+- [ ] Tổng notional ≤ $235; spot ≤ $235; margin ≤ $235; buffer ≥ $30.
+- [ ] Không coin nào vượt 15,7% vốn notional.
+- [ ] 0 P1; DD < 5%.
+- [ ] PnL attribution đúng: funding vs basis vs phí.
+
+### 6.3 Checklist test
+
+| ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|---|
+| P6-T01 | 3 coin đồng thời | State | Đúng 3 vị thế | ⬜ | |
+| P6-T02 | Tổng exposure | Tính notional | ≤ $235 | ⬜ | |
+| P6-T03 | Correlation | Ma trận 14d | Không vượt cap | ⬜ | |
+| P6-T04 | Buffer | Balance | ≥ $30 | ⬜ | |
+| P6-T05 | Rebalance tuần | Log | Đúng rule | ⬜ | |
+| P6-T06 | Thiếu ứng viên | Ngày không đủ 3 | Giữ tiền mặt, không hạ chuẩn | ⬜ | |
+| P6-T07 | PnL attribution | Report tháng | Khớp funding − phí ± basis | ⬜ | |
+| P6-T08 | 0 P1 | Alert log | 0 | ⬜ | |
+| P6-T09 | DD | Report | < 5% | ⬜ | |
+| P6-T10 | Audit log | Mẫu 10 lệnh | Đúng rule, đúng size | ⬜ | |
+
+### 6.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày bắt đầu / kết thúc | |
+| Pass / Fail | __ / 10 |
+| Số ngày đủ 3 coin | |
+| Notional TB / max | |
+| Funding thực | |
+| Bằng chứng | |
+| Quyết định | ⬜ Đạt / ⬜ Chạy tiếp / ⬜ Dừng |
+
+### 6.5 Ghi chú & rủi ro
+
+- 3 coin đều mid/small-cap, 4h interval → correlation cao. Nếu 3 coin cùng beta, có thể chỉ nên giữ 2.
+- Không thêm coin thứ 4 ở $500 (vi phạm risk budget, min notional).
+
+---
+
+## PHASE 7 — G: GATE 60–90 NGÀY
+
+**Mục tiêu:** quyết định có nâng vốn lên $1.000 hay tiếp tục ở $500; có nên lên 2x hay không.
+
+**Tham chiếu kế hoạch:** §12.4 (11 điều kiện gate), §12.2 (nâng vốn), §13 (review tháng).
+
+**Giải thích cơ bản:** Gate là "cửa an toàn" duy nhất để tăng vốn. Không đạt đủ 11 điều kiện thì giữ nguyên, không thương lượng.
+
+### 7.1 Các bước thực hiện
+
+- [ ] **7.1.1** Tổng hợp 60–90 ngày: PnL, funding thực, phí, slippage, DD, uptime, sự cố.
+- [ ] **7.1.2** Đối chiếu **11 điều kiện §12.4**.
+- [ ] **7.1.3** Audit log mẫu 20 lệnh: đúng rule, đúng size, rollback đúng.
+- [ ] **7.1.4** Kiểm tra alert + kill switch + dead-man trong 7 ngày gần nhất.
+- [ ] **7.1.5** Quyết định: (a) giữ $500, (b) lên $1.000, (c) xét 2x sau thêm 30 ngày.
+- [ ] **7.1.6** Ghi biên bản quyết định + lý do.
+
+### 7.2 Kết quả cần đạt
+
+- [ ] Có báo cáo đủ 11 mục gate, kèm bằng chứng.
+- [ ] Quyết định được ghi log, có người ký.
+- [ ] Nếu nâng vốn: kế hoạch chuyển tiền, thay đổi size, cập nhật config.
+- [ ] Nếu không: ngày review lại.
+
+### 7.3 Checklist test (gate)
+
+| ID | Điều kiện §12.4 | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|
+| P7-T01 | ≥ 60 ngày live | Có | ⬜ | |
+| P7-T02 | Net dương sau phí | Có | ⬜ | |
+| P7-T03 | Slippage ≤ 0,15% ở ≥80% lệnh | Có | ⬜ | |
+| P7-T04 | 0 lỗi vận hành chưa khắc phục | Có | ⬜ | |
+| P7-T05 | Max DD < 10% | Có | ⬜ | |
+| P7-T06 | Funding lệch < 20% | Có | ⬜ | |
+| P7-T07 | Giải thích được từng tháng | Có | ⬜ | |
+| P7-T08 | Reconcile diff = 0 trong 30 ngày | Có | ⬜ | |
+| P7-T09 | 0 P1 chưa root-cause | Có | ⬜ | |
+| P7-T10 | Alert/kill test trong 7 ngày | Có | ⬜ | |
+| P7-T11 | Nếu xét 2x: 30 ngày DD <5%, không chạm buffer | Có | ⬜ | |
+
+### 7.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Ngày review | |
+| Số ngày live | |
+| Pass / Fail | __ / 11 |
+| Net APR thực | |
+| Quyết định | ⬜ Giữ $500 / ⬜ Lên $1.000 / ⬜ Xét 2x / ⬜ Dừng |
+| Người ký | |
+
+### 7.5 Ghi chú & rủi ro
+
+- **Không nâng vốn vì "thấy lãi tốt"** — phải đủ 11 mục.
+- 2x chỉ xét sau khi 1x sạch lỗi ≥ 60–90 ngày và qua gate riêng.
+- Nếu fail gate: giữ nguyên 30 ngày, không hạ chuẩn.
+
+---
+
+## PHASE 8 — SCALE: $1.000 / $2.000 / $5.000
+
+**Mục tiêu:** nhân bản hệ thống đã chứng minh, thay đổi đúng những gì cần thay đổi.
+
+**Tham chiếu kế hoạch:** §12.2 (bảng nâng vốn), §12.3 (chi phí ẩn), §10.1 (risk budget).
+
+**Giải thích cơ bản:** Không đổi chiến lược, bộ lọc hay mức L3. Chỉ đổi số coin, size, hạ tầng và mức redundancy. Mỗi lần nâng tối đa gấp đôi, cách nhau ≥ 60 ngày.
+
+### 8.1 Các bước theo mức vốn
+
+| Mức | Notional/leg | Coin | N/coin | Buffer | Hạ tầng | Việc phải làm thêm |
+|---|---|---|---|---|---|---|
+| $500 | $235 | 3 | $78 | $30 | Nhà + UPS/4G | — |
+| $1.000 | $470 | 5 | $94 | $60 | Nhà + watchdog ngoài | Thêm 2 coin; alert 2 kênh; maker leg spot |
+| $2.000 | $940 | 7 | $134 | $120 | VPS $5–6 + 4G | PnL attribution tự động; chaos drill; VPS |
+| $5.000 | $2.350 | 9 | $261 | $300 | VPS $10–12 + redundancy | Sub-account buffer; watchdog thứ 2; audit export |
+
+### 8.2 Kết quả cần đạt mỗi mức
+
+- [ ] Reconcile diff = 0 trong 30 ngày đầu ở mức mới.
+- [ ] Không P1; DD < 5% (mức $1k–$2k) hoặc < 4% ($5k).
+- [ ] Slippage không tăng > 0,05%/side so với mức trước.
+- [ ] Hạ tầng mới chạy ổn định ≥ 99,5% uptime.
+- [ ] Gate §12.4 được chạy lại trước mỗi lần nâng.
+
+### 8.3 Checklist test (mỗi lần nâng)
+
+| ID | Test | Kỳ vọng | Kết quả | Ghi chú |
+|---|---|---|---|---|
+| P8-T01 | Số dư & phân bổ mới | Đúng bảng §12.2 | ⬜ | |
+| P8-T02 | Buffer mới | Đúng ngưỡng 6% | ⬜ | |
+| P8-T03 | Coin mới pass filter | 100% | ⬜ | |
+| P8-T04 | Correlation | ≤ 60% notional | ⬜ | |
+| P8-T05 | Reconcile 30 ngày | diff = 0 | ⬜ | |
+| P8-T06 | Alert/kill test | Pass | ⬜ | |
+| P8-T07 | Uptime | ≥ 99,5% | ⬜ | |
+| P8-T08 | Slippage | Không tăng > 0,05% | ⬜ | |
+| P8-T09 | Gate §12.4 | Đủ 11 mục | ⬜ | |
+| P8-T10 | Rollback plan | Có, đã test | ⬜ | |
+
+### 8.4 Kết quả test (biên bản)
+
+| Hạng mục | Giá trị |
+|---|---|
+| Mức vốn | |
+| Ngày nâng | |
+| Pass / Fail | __ / 10 |
+| Vốn mới / notional | |
+| Người ký | |
+| Quyết định | ⬜ Đạt / ⬜ Quay lại mức cũ |
+
+### 8.5 Ghi chú & rủi ro
+
+- **Không nâng vốn và đổi chiến lược cùng lúc.** Mỗi lần chỉ đổi một biến.
+- Ở $5.000, VPS/redundancy là bắt buộc; ở $500–$1.000, VPS ăn phần lớn lãi (§12.3).
+- Không dùng đòn bẩy để "tăng tốc" — 2x chỉ sau gate riêng.
+
+---
+
+## PHỤ LỤC A — RUNBOOK NHANH (P1)
+
+Tham chiếu §8.2.
+
+| Sự cố | Máy tự xử lý | Người làm | SLA |
+|---|---|---|---|
+| Bot chết/mất heartbeat > 5 phút | Chặn vào mới; dead-man | Kiểm tra máy/mạng, restart, reconcile | 15 phút |
+| Leg 2 fail | Retry ≤3; rollback leg 1 | Xác nhận rollback, ghi log | 15 phút |
+| Reconcile lệch | Dừng vào mới | Đối chiếu app, sửa state có audit | 30 phút |
+| API 429/5xx | Backoff | Kiểm tra status sàn | 30 phút |
+| Sàn pause rút/tag/đổi interval | Đóng vị thế liên quan | Rút phần được, blacklist | Ngay |
+| Funding flip 2 kỳ | Đóng coin | Review vào lại | Theo kỳ |
+
+> Sau P1: **không tự mở lại** cho tới khi người xác nhận root-cause + reconcile khớp.
+
+## PHỤ LỤC B — CHECKLIST NGÀY/TUẦN/THÁNG
+
+Tham chiếu §13.
+
+**Ngày (15 phút):** heartbeat + reconcile; alert tồn; funding thực vs kỳ vọng; predicted FR; OI/basis/giá; buffer Futures; lệnh treo; thông báo sàn.
+
+**Tuần:** re-rank universe; decay/spike; PnL attribution; correlation/exposure; slippage thực; lịch unlock; test alert/kill/dead-man; BNB 2 ví.
+
+**Tháng:** hiệu suất vs kỳ vọng; model drift; audit log 20 lệnh; chaos drill; post-mortem; siết risk budget nếu cần.
+
+## PHỤ LỤC C — THAM SỐ CHỐT (theo §15.2)
+
+```yaml
+capital: 500
+spot: 235
+futures: 265          # margin 235 + buffer 30
+leverage: 1
+coins: 3
+notional_per_leg: 235
+notional_per_coin: 78
+fee_roundtrip: 0.35   # gồm slippage 0.11%
+net_drag_apr: 9.13    # điểm APR
+baseline_apr: 10.95
+apr_forward_min: 20
+apr_forward_max: 60
+excess_min: 15
+net_apr_min: 20
+pos_ratio_14d_min: 0.85
+zero_rate_14d_max: 0.10
+cv_14d_max: 2.0
+decay_7d_vs_14d_min: 0.6
+slippage_max: 0.2
+volume_min_usd: 5000000
+dd_kill: 0.20
+heartbeat_s: 30
+reconcile_s: 60
+deadman_s: 300
+max_order_notional: 125
+```
+
+## PHỤ LỤC D — SIGN-OFF
+
+| Phase | Người thực hiện | Ngày | Kết quả | Người review |
+|---|---|---|---|---|
+| 0 | | | ⬜ | |
+| 1 | | | ⬜ | |
+| 2 | | | ⬜ | |
+| 3 | | | ⬜ | |
+| 4 | | | ⬜ | |
+| 5 | | | ⬜ | |
+| 6 | | | ⬜ | |
+| 7 | | | ⬜ | |
+| 8 | | | ⬜ | |
+
+---
+
+## NHẬT KÝ THAY ĐỔI TASK
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.0 | 24/11/2026 | Tạo task từ kế hoạch v2.2: $500, 1x, 3 coin, L3; 9 phase; checklist test + biên bản kết quả từng phase |
+
+---
+
+*Hết task. Cập nhật kết quả test trực tiếp vào file này sau mỗi phase; không tạo file kết quả rời.*
