@@ -31,7 +31,7 @@ python scripts\check_connection.py
 - 3 loại key tách biệt: trade (`BINANCE_API_KEY/SECRET`), read-only (`BINANCE_READONLY_KEY/SECRET`), demo (`BINANCE_DEMO_*`).
 - Trade key: Reading + Spot & Margin + Futures; **Withdraw luôn OFF**; Universal Transfer chỉ bật Phase 3. Read-only: chỉ Reading. Demo key tạo ở `demo.binance.com/en/my/settings/api-management`.
 - Guard: `_write_guard` chặn mọi mutation khi `readonly=True`; `_order_guard` chặn khi `DRY_RUN=true`, live cần `LIVE_TRADING_ENABLED=true`, demo cần `BINANCE_USE_DEMO=true` + `DRY_RUN=false`.
-- Live key phải whitelist **cả IP nhà và IP VPS `43.240.117.54`**. Hiện VPS gọi live bị `-2015` vì thiếu IP VPS — phải thêm trên Binance UI (endpoint IP restriction trả 500 “không hỗ trợ” với tài khoản thường).
+- Live key phải whitelist **cả IP nhà và IP VPS `43.240.117.54`**. Đã whitelist; VPS live OK. Nếu VPS đổi IP, cập nhật lại trên Binance UI (endpoint IP restriction qua API trả 500 “không hỗ trợ” với tài khoản thường).
 - Không tin demo read-only: đã gặp trường hợp vẫn đặt được lệnh; luôn dùng guard local và test lại bằng live read-only.
 - Không bao giờ gọi endpoint withdraw. Kiểm tra quyền rút bằng `/sapi/v1/account/apiRestrictions` (`enableWithdrawals`).
 - `.env` không commit; trên VPS mode `600`, owner `funding`. Không log/print secret, không dán key vào chat.
@@ -79,7 +79,7 @@ python scripts\check_connection.py
 - systemd `funding-heartbeat` (placeholder, `Restart=always`) + `funding-backup.timer` 03:15 UTC; script `/usr/local/sbin/funding-{heartbeat,backup}`. Khi có bot thật, thay `ExecStart`, giữ `Restart=always`.
 - VPS chạy chung `cors-prod` (Caddy 80/443, app 1508–1599, MySQL), `binance-demo-server` (127.0.0.1:8081), onedash/vector/vmagent. **Không bật UFW/đóng port**; service mới bind `127.0.0.1` và đi qua Tailscale.
 - Sync code: tar loại `.env`/`.git`/`data`/`logs`/`reports`, scp, giải nén; scp `.env` riêng, `chmod 600`, `chown funding:funding`.
-- Sau khi đổi `.env`/code: restart service liên quan. `check_connection.py` trên VPS hiện fail `-2015` cho tới khi whitelist IP VPS.
+- Sau khi đổi `.env`/code: restart service liên quan. `check_connection.py` trên VPS OK; nếu đổi IP VPS phải whitelist lại cả 2 key.
 
 ## 9. Trước khi commit
 

@@ -1,13 +1,13 @@
 # TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
 
 **Mã task:** TASK-FR-001  
-**Phiên bản:** 1.3  
+**Phiên bản:** 1.4  
 **Ngày tạo:** 24/11/2026  
 **Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.4**  
 **Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
 **Hạ tầng:** **VPS sẵn có**, chạy 24/7, $0; dashboard realtime theo §7.4  
 **Người thực hiện:** ____________________  
-**Trạng thái tổng:** 🟡 Phase 0 đạt có điều kiện — chờ whitelist IP VPS
+**Trạng thái tổng:** ✅ Phase 0 đạt (có ngoại lệ P0-T07/P0-T09)
 
 ---
 
@@ -50,7 +50,7 @@
 
 | Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
 |---|---|---|---|---|---|---|
-| 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | 🟡 | | | 11✅/1🟡/1⏭️; chờ whitelist IP VPS |
+| 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ✅ | | | 11✅/1🟡/1⏭️; VPS live OK |
 | 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ⬜ | | | |
 | 2 | B1a — Ingest + Feature + Screener + UI read-only | 4–6 ngày | ⬜ | | | |
 | 3 | B1b — Executor + Reconciler + Watchdog + UI STOP | 6–8 ngày | ⬜ | | | |
@@ -77,8 +77,8 @@
 ### 0.1 Các bước thực hiện
 
 - [x] **0.1.1** Mở/kiểm tra tài khoản Binance, bật 2FA, anti-phishing code.
-- [x] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP. *(live: withdraw=False, futures=True, spot=True, ip_restrict=True)*
-- [x] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập. *(live read-only: leverage/order bị 401 -2015)*
+- [x] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP. *(live: withdraw=False, futures=True, spot=True, ip_restrict=True; IP VPS đã whitelist)*
+- [x] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập. *(live read-only: leverage/order bị 401 -2015; đọc account/position từ VPS OK)*
 - [x] **0.1.4** Nạp **$500**; quy đổi USDT; phân bổ đúng:
   - Spot wallet: **$235** → thực tế **235.97**
   - Futures wallet: **$265** (margin $235 + buffer $30) → thực tế **265.85**
@@ -146,9 +146,9 @@ funding-bot/
 
 | ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
 |---|---|---|---|---|---|
-| P0-T01 | Quyền rút bị tắt | Gọi API withdrawal bằng key chính | 401/403 | ✅ | `apiRestrictions`: withdraw=False (không gọi endpoint rút) |
-| P0-T02 | Key read-only không trade | Gọi API đặt lệnh bằng key read-only | 401/403 | ✅ | Live read-only: leverage và order đều `401 -2015`; local `_write_guard` cũng chặn |
-| P0-T03 | Số dư đúng | GET balance Spot/Futures | 235 / 265 USDT | ✅ | Spot 235.97 / Futures 265.85 (lệch <1%) |
+| P0-T01 | Quyền rút bị tắt | Gọi API withdrawal bằng key chính | 401/403 | ✅ | `apiRestrictions`: withdraw=False (local + VPS) |
+| P0-T02 | Key read-only không trade | Gọi API đặt lệnh bằng key read-only | 401/403 | ✅ | VPS: leverage/order bị `401 -2015`; đọc account/position bằng read-only OK; local `_write_guard` cũng chặn |
+| P0-T03 | Số dư đúng | GET balance Spot/Futures | 235 / 265 USDT | ✅ | Spot 235.97 / Futures 265.85 (local + VPS) |
 | P0-T04 | Cross + 1x | Kiểm tra app + API `positionRisk` | Cross, leverage 1 | ✅ | BTCUSDT: leverage=1, margin=cross; `dualSidePosition=false` |
 | P0-T05 | BNB discount | Xem fee tier / thử lệnh nhỏ | Spot 0,075%; Fut 0,045% | ✅ | Spot thực tế 0,075% (commission BNB 0,00001311); futures `feeBurn=true`, API base 0,05% |
 | P0-T06 | Alert Telegram | Bắn test message | Nhận < 10s | ✅ | `sendMessage` OK, 1440,7 ms, message_id=3 |
@@ -167,8 +167,8 @@ funding-bot/
 | Ngày chạy | 25/11/2026 |
 | Người chạy | OpenCode agent (user review) |
 | Pass / Fail | 11 ✅ / 1 🟡 / 1 ⏭️ (tổng 13) |
-| Bằng chứng (link log/ảnh/commit) | Live: spot 235.97 / futures 265.85; read-only 401 -2015; BNB fee 0,075%; Telegram message_id 3 (1,44s); dead-man 200; Tailscale 59ms; order demo 28694503206; backup restore=42; VPS `/opt/funding-bot` |
-| Quyết định | ✅ **Đạt phase 0 có điều kiện** (whitelist IP VPS `43.240.117.54`; SMS/email hoãn) / ⬜ Chạy lại / ⬜ Dừng |
+| Bằng chứng (link log/ảnh/commit) | Live local + VPS OK: spot 235.97 / futures 265.85; read-only 401 -2015 nhưng đọc account/position OK; BNB fee 0,075%; Telegram message_id 3 (1,44s); dead-man 200; Tailscale 59ms; order demo 28694503206; backup restore=42; VPS `/opt/funding-bot` |
+| Quyết định | ✅ **Đạt phase 0** (ngoại lệ: SMS/email hoãn — P0-T07; firewall VPS dùng chung — P0-T09) / ⬜ Chạy lại / ⬜ Dừng |
 
 ### 0.6 Ghi chú & rủi ro
 
@@ -182,7 +182,7 @@ funding-bot/
 - **Demo không hỗ trợ** `apiRestrictions` và `spot tradeFee` (404) → không kiểm tra được quyền rút/phí spot trên demo; phải test bằng live key.
 - **Funding trên demo là dữ liệu mô phỏng** (BTCUSDT trả flat 0,0100%) → không dùng demo để backtest/research; chỉ dùng public live data.
 - **Deploy VPS:** `/opt/funding-bot` (user `funding`), venv `.venv`, `.env` mode 600; systemd `funding-heartbeat` (placeholder) và `funding-backup.timer` 03:15 UTC. Khi có bot thật, thay `ExecStart` của heartbeat, giữ `Restart=always`.
-- **BLOCKER trước khi bot chạy VPS:** live key mới whitelist IP nhà; gọi từ VPS bị `-2015` (request ip `43.240.117.54`). Phải thêm IP VPS vào **cả trade key và read-only key** trên Binance UI. Endpoint quản lý IP qua API trả HTTP 500 `100001002` (không hỗ trợ tài khoản thường).
+- **VPS IP whitelist:** đã thêm `43.240.117.54` cho cả trade + read-only key; `check_connection.py` trên VPS trả `KẾT LUẬN: OK`, read-only đọc account/position OK. Nếu VPS đổi IP, phải cập nhật lại cả 2 key trên Binance UI (endpoint IP restriction qua API trả 500 `100001002`).
 - **Tailscale:** VPS `100.98.182.15`, local `100.114.108.28`; ping 59 ms, TCP 24700 qua Tailscale OK.
 - **`.env`:** phải UTF-8 **không BOM**, LF. PowerShell 5.1 `Set-Content -Encoding utf8` đã từng gây BOM/mojibake comment; sửa bằng Python regex, không dùng `Get-Content | Set-Content`.
 - **recvWindow:** đặt `10000` vì call lạnh từ VPS có thể >5s; clock offset thực tế -44ms.
@@ -816,6 +816,7 @@ ui_stop_requires_confirm: true
 | 1.1 | 24/11/2026 | Thêm **UI realtime trên VPS sẵn có** (§7.4): UI read-only Phase 2, positions/PnL/STOP Phase 3; bỏ phương án UPS/4G; thêm **quy tắc cấm tạo file trước phase**; cập nhật test (0: 13, 2: 16, 3: 24, 4: 13, 5: 11, 7: 12, 8: 11) |
 | 1.2 | 25/11/2026 | Chuyển Testnet → **Demo Trading**; thêm §0.1a (3 loại key); triển khai VPS `/opt/funding-bot` (user funding, systemd, backup); ghi kết quả P0 5✅/2❌/1🟡/1⬜/4⏭️; thêm guard read-only + ngoại lệ firewall VPS dùng chung |
 | 1.3 | 25/11/2026 | Live key hoạt động (spot 235.97/futures 265.85, withdraw=False, read-only 401); Telegram 1,44s; dead-man 200; Tailscale 59ms; BNB fee 0,075%; sửa `.env` UTF-8 không BOM; kết quả **11✅/1🟡/1⏭️**; blocker whitelist IP VPS `43.240.117.54` |
+| 1.4 | 25/11/2026 | Whitelist IP VPS xong: `check_connection.py` trên VPS OK, read-only đọc account/position OK; **Phase 0 đạt** (ngoại lệ P0-T07 SMS/email, P0-T09 firewall VPS dùng chung) |
 
 ---
 
