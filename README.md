@@ -34,13 +34,24 @@ pip install -r requirements.txt
 
 ## Điền key
 
-Mở `.env`, điền:
+Mở `.env`, điền **3 loại key tách biệt**:
 
-- `BINANCE_API_KEY` / `BINANCE_API_SECRET`: key giao dịch, bật **Spot + USDⓈ-M Futures**, **tắt Withdraw**, whitelist IP.
-- `BINANCE_READONLY_KEY` / `BINANCE_READONLY_SECRET`: key chỉ đọc (không bắt buộc để test).
-- `BINANCE_TESTNET_API_KEY` / `BINANCE_TESTNET_API_SECRET`: nếu test trên testnet.
+| Key | Dùng cho | Quyền bật | Tuyệt đối không bật |
+|---|---|---|---|
+| **Trade** (`BINANCE_API_KEY/SECRET`) | executor đặt/hủy lệnh, transfer buffer | Reading, Spot & Margin Trading, Futures; Universal Transfer **chỉ khi** bật buffer manager | Withdraw |
+| **Read-only** (`BINANCE_READONLY_KEY/SECRET`) | monitor, reconciler, dashboard độc lập | Reading | Spot/Futures trading, Withdraw, Universal Transfer |
+| **Demo** (`BINANCE_DEMO_API_KEY/SECRET`) | chạy thử toàn luồng trên ví ảo | Reading, Spot, Futures | Không liên quan tiền thật |
 
-Mặc định an toàn: `DRY_RUN=true`, `LIVE_TRADING_ENABLED=false`.
+Cách tạo:
+
+1. **Trade key**: đăng nhập binance.com → avatar → **Account → API Management** → **Create API** → chọn **System generated** (HMAC; code dùng HMAC SHA256) → xác nhận 2FA/email → bật đúng quyền như bảng → **Restrict access to trusted IPs only** và nhập IP VPS → lưu secret (chỉ hiện 1 lần).
+2. **Read-only key**: làm lại bước trên, chỉ bật **Enable Reading**, cùng whitelist IP.
+3. **Demo key**: đăng nhập binance.com → **Trade → Demo Trading** (hoặc demo.binance.com) → avatar → **API Management** (`demo.binance.com/en/my/settings/api-management`) → **Create API** → bật Reading + Spot + Futures. Đặt `BINANCE_USE_DEMO=true` để client tự dùng `demo-api.binance.com` / `demo-fapi.binance.com`.
+
+Mặc định an toàn: `DRY_RUN=true`, `LIVE_TRADING_ENABLED=false`. Khi chạy demo: `BINANCE_USE_DEMO=true`, `DRY_RUN=false`, **giữ** `LIVE_TRADING_ENABLED=false`.
+
+> Demo Trading thay cho testnet cũ. Demo gần như cùng tính năng và dữ liệu sát live, nhưng **không đo được slippage/fill/funding thật** — mục đích là kiểm tra kỹ thuật (order lifecycle, rollback, reconcile).
+
 
 ## Chạy kiểm tra
 

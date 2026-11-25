@@ -40,7 +40,7 @@ def main() -> int:
     )
     print(
         f"An toàn    : DRY_RUN={settings.dry_run} | "
-        f"LIVE={settings.live_trading_enabled} | testnet={settings.use_testnet}"
+        f"LIVE={settings.live_trading_enabled} | demo={settings.use_demo}"
     )
     print(f"Config     : {'OK' if not errors else 'LỖI'}")
     for err in errors:

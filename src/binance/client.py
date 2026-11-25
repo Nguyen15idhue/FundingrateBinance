@@ -2,9 +2,9 @@
 
 - Public endpoints: không cần key.
 - Signed endpoints: HMAC SHA256, tự đồng bộ giờ server.
-- Có sẵn guard: không gửi lệnh nếu DRY_RUN=true hoặc chưa bật LIVE_TRADING_ENABLED.
+- Có sẵn guard: không gửi lệnh nếu DRY_RUN=true hoặc chưa bật LIVE_TRADING_ENABLED (trừ Demo Trading).
 
-KHÔNG dùng key có quyền Withdraw.
+KHÔNG dùng key có quyền Withdraw. Key demo chỉ dùng cho demo.binance.com.
 """
 
 from __future__ import annotations
@@ -31,34 +31,40 @@ class BinanceAPIError(RuntimeError):
 
 class BinanceClient:
     SPOT_LIVE = "https://api.binance.com"
-    SPOT_TESTNET = "https://testnet.binance.vision"
     FUTURES_LIVE = "https://fapi.binance.com"
-    FUTURES_TESTNET = "https://testnet.binancefuture.com"
+    # Demo Trading (demo.binance.com) — ví ảo, dữ liệu thị trường sát live.
+    # Không phải testnet cũ; key demo chỉ dùng được trên endpoint demo.
+    SPOT_DEMO = "https://demo-api.binance.com"
+    FUTURES_DEMO = "https://demo-fapi.binance.com"
 
     def __init__(
         self,
         settings: Settings,
         *,
         readonly: bool = False,
-        testnet: bool | None = None,
+        demo: bool | None = None,
     ):
         self.settings = settings
         self.readonly = readonly
-        self.testnet = settings.use_testnet if testnet is None else testnet
+        self.demo = settings.use_demo if demo is None else demo
 
         spot_override = settings.env("BINANCE_SPOT_BASE_URL")
         futures_override = settings.env("BINANCE_FUTURES_BASE_URL")
-        self.spot_base = spot_override or (self.SPOT_TESTNET if self.testnet else self.SPOT_LIVE)
+        self.spot_base = spot_override or (self.SPOT_DEMO if self.demo else self.SPOT_LIVE)
         self.futures_base = futures_override or (
-            self.FUTURES_TESTNET if self.testnet else self.FUTURES_LIVE
+            self.FUTURES_DEMO if self.demo else self.FUTURES_LIVE
         )
 
-        if readonly:
+        if self.demo:
+            if readonly:
+                self.api_key = settings.demo_readonly_key or settings.demo_key
+                self.api_secret = settings.demo_readonly_secret or settings.demo_secret
+            else:
+                self.api_key = settings.demo_key
+                self.api_secret = settings.demo_secret
+        elif readonly:
             self.api_key = settings.readonly_key
             self.api_secret = settings.readonly_secret
-        elif self.testnet:
-            self.api_key = settings.env("BINANCE_TESTNET_API_KEY")
-            self.api_secret = settings.env("BINANCE_TESTNET_API_SECRET")
         else:
             self.api_key = settings.api_key
             self.api_secret = settings.api_secret
@@ -232,8 +238,10 @@ class BinanceClient:
     def _order_guard(self) -> None:
         if self.settings.dry_run:
             raise BinanceAPIError(0, None, "DRY_RUN=true — không gửi lệnh thật")
-        if not (self.settings.live_trading_enabled or self.settings.use_testnet):
-            raise BinanceAPIError(0, None, "LIVE_TRADING_ENABLED=false — không gửi lệnh thật")
+        if not (self.settings.live_trading_enabled or self.settings.use_demo):
+            raise BinanceAPIError(
+                0, None, "LIVE_TRADING_ENABLED=false — không gửi lệnh thật"
+            )
 
     def place_futures_order(self, **params: Any) -> dict[str, Any]:
         self._order_guard()

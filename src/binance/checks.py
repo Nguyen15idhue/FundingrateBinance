@@ -38,6 +38,10 @@ def _f(value: Any, default: float = 0.0) -> float:
 def run_checks(settings: Settings) -> CheckReport:
     report = CheckReport()
     client = BinanceClient(settings)
+    if settings.use_demo:
+        report.warnings.append(
+            "Đang chạy DEMO Trading (ví ảo) — số dư/fill không phải tiền thật."
+        )
 
     # ---------- public ----------
     try:
@@ -112,7 +116,9 @@ def run_checks(settings: Settings) -> CheckReport:
         report.private["futures_available_usd"] = _f(account.get("availableBalance"))
         report.private["futures_assets"] = assets
         expected = float(settings.get("capital.futures_usd", 265))
-        if abs(report.private["futures_wallet_usd"] - expected) > max(1.0, expected * 0.02):
+        if not settings.use_demo and abs(
+            report.private["futures_wallet_usd"] - expected
+        ) > max(1.0, expected * 0.02):
             report.warnings.append(
                 f"Futures wallet {report.private['futures_wallet_usd']:.2f} "
                 f"lệch kỳ vọng {expected:.2f} (>2%)."
@@ -138,7 +144,9 @@ def run_checks(settings: Settings) -> CheckReport:
         usdt = next((b for b in balances if b["asset"] == "USDT"), None)
         report.private["spot_usdt"] = usdt["free"] if usdt else 0.0
         expected_spot = float(settings.get("capital.spot_usd", 235))
-        if usdt and abs(usdt["free"] - expected_spot) > max(1.0, expected_spot * 0.02):
+        if not settings.use_demo and usdt and abs(
+            usdt["free"] - expected_spot
+        ) > max(1.0, expected_spot * 0.02):
             report.warnings.append(
                 f"Spot USDT {usdt['free']:.2f} lệch kỳ vọng {expected_spot:.2f} (>2%)."
             )

@@ -1,10 +1,11 @@
 # TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
 
 **Mã task:** TASK-FR-001  
-**Phiên bản:** 1.0  
+**Phiên bản:** 1.1  
 **Ngày tạo:** 24/11/2026  
-**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.2**  
+**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.3**  
 **Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
+**Hạ tầng:** **VPS sẵn có**, chạy 24/7, $0; dashboard realtime theo §7.4  
 **Người thực hiện:** ____________________  
 **Trạng thái tổng:** ⬜ Chưa bắt đầu
 
@@ -30,14 +31,29 @@
 - Test fail → ghi nguyên nhân, người sửa, ngày sửa, test lại.
 - Không chuyển phase khi còn test ❌ chưa đóng.
 
-### 0.3 Bảng tiến độ tổng
+### 0.3 Quy tắc tạo file theo phase (bắt buộc)
+
+> **Cấm tạo file/thư mục của phase chưa tới.** Chỉ tạo đúng phần của phase hiện tại. File tạm phải ghi rõ và xóa trước khi qua phase.
+
+| Phase | Được tạo | Không được tạo |
+|---|---|---|
+| 0 | `.env`, `.env.example`, `.gitignore`, `requirements.txt`, `config/`, `src/config.py`, `src/binance/{client,checks}.py`, `scripts/check_connection.py`, thư mục rỗng | ingest, features, screener, executor, ui, tests |
+| 1 | `backtest/` | src runtime, ui |
+| 2 | `src/ingest`, `src/features`, `src/screener.py`, `ui/` **read-only** | executor, reconciler, watchdog, STOP |
+| 3 | `src/allocator`, `src/executor`, `src/risk`, `src/reconciler`, `src/watchdog`, UI positions/PnL/STOP | lịch sử 30/90 ngày |
+| 4 | `tests/`, fixtures | feature mới |
+| 5+ | report/history | thay đổi kiến trúc |
+
+> **UI chỉ bắt đầu ở Phase 2.** Phase 0–1 không tạo `ui/`; Phase 2 chỉ read-only; STOP chỉ xuất hiện ở Phase 3.
+
+### 0.4 Bảng tiến độ tổng
 
 | Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
 |---|---|---|---|---|---|---|
 | 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ⬜ | | | |
 | 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ⬜ | | | |
-| 2 | B1a — Ingest + Feature + Screener | 4–6 ngày | ⬜ | | | |
-| 3 | B1b — Executor + Reconciler + Watchdog | 5–7 ngày | ⬜ | | | |
+| 2 | B1a — Ingest + Feature + Screener + UI read-only | 4–6 ngày | ⬜ | | | |
+| 3 | B1b — Executor + Reconciler + Watchdog + UI STOP | 6–8 ngày | ⬜ | | | |
 | 4 | B1c — Testnet + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
 | 5 | R1 — Live $500, 2 coin | 2 tuần | ⬜ | | | |
 | 6 | R2 — Live $500, 3 coin | 3–4 tuần | ⬜ | | | |
@@ -45,6 +61,8 @@
 | 8 | Scale — $1k / $2k / $5k | Tùy gate | ⬜ | | | |
 
 > Tổng trước khi có tiền thật: **~3–4 tuần** (Phase 0 → 4). Xem §11 kế hoạch.
+>
+> UI read-only hoàn thành trong **Phase 2**; UI positions/PnL/STOP trong **Phase 3** (§7.4 kế hoạch).
 
 ---
 
@@ -58,7 +76,7 @@
 
 ### 0.1 Các bước thực hiện
 
-- [ ] **0.1.1** Mở/kiểm tra tài khoản Binance, bật 2FA, anti-phishing code.
+- [x] **0.1.1** Mở/kiểm tra tài khoản Binance, bật 2FA, anti-phishing code.
 - [ ] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP.
 - [ ] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập.
 - [ ] **0.1.4** Nạp **$500**; quy đổi USDT; phân bổ đúng:
@@ -70,9 +88,10 @@
 - [ ] **0.1.8** Tạo tài khoản **Testnet Futures** + API key testnet.
 - [ ] **0.1.9** Dựng repo theo cấu trúc đề xuất; `.env` nằm trong `.gitignore`.
 - [ ] **0.1.10** Cấu hình alert: Telegram bot + SMS/email; test bắn thử.
-- [ ] **0.1.11** Cấu hình hạ tầng: máy chạy 24/7 + **UPS ≥ 30 phút** + **4G failover** + **dead-man ping ngoài** (dịch vụ ping miễn phí hoặc VPS nhỏ).
-- [ ] **0.1.12** Đồng bộ giờ NTP; kiểm tra drift.
-- [ ] **0.1.13** Chốt **alert severity**: P1 (phải xử lý ≤15 phút), P2 (≤24h), P3 (theo tuần).
+- [ ] **0.1.11** Cấu hình **VPS sẵn có** để chạy 24/7: user riêng, firewall (chỉ SSH + Tailscale), NTP, `systemd Restart=always`, backup DB ngày.
+- [ ] **0.1.12** Cài **Tailscale** trên VPS + máy cá nhân; xác nhận truy cập nội bộ.
+- [ ] **0.1.13** Cấu hình **dead-man ping ngoài** (dịch vụ khác, không đặt cùng VPS).
+- [ ] **0.1.14** Chốt **alert severity**: P1 (phải xử lý ≤15 phút), P2 (≤24h), P3 (theo tuần).
 
 ### 0.2 Cấu trúc repo đề xuất
 
@@ -88,8 +107,9 @@ funding-bot/
 │   ├── reconciler/         # đối soát API ↔ state
 │   ├── watchdog/           # heartbeat, dead-man
 │   └── report/             # PnL attribution, daily report
-├── backtest/
-├── tests/
+├── ui/                     # Phase 2 (read-only), Phase 3 (STOP)
+├── backtest/               # Phase 1
+├── tests/                  # Phase 4
 ├── data/                   # DB, parquet (gitignored)
 ├── logs/                   # audit log (gitignored)
 ├── reports/                # report ngày/tuần (gitignored)
@@ -97,13 +117,16 @@ funding-bot/
 └── README.md
 ```
 
+> Chỉ tạo các thư mục trên khi tới phase tương ứng (xem §0.3).
+
 ### 0.3 Kết quả cần đạt
 
 - [ ] Ảnh chụp màn hình: Spot $235, Futures $265, Cross, 1x.
 - [ ] API key chính **không** có quyền rút tiền; key read-only **không** đặt được lệnh.
 - [ ] Alert test tới điện thoại trong < 10 giây.
-- [ ] Bot chạy được trên máy/UPS/4G khi rút điện và rút mạng WAN.
+- [ ] VPS truy cập được qua Tailscale; `systemd` tự restart khi kill process; backup DB chạy và restore thử được.
 - [ ] Không có secret nào trong git (đã kiểm tra `git grep`).
+- [ ] **Không tạo `ui/`, executor, screener ở phase này.**
 
 ### 0.4 Checklist test
 
@@ -117,10 +140,11 @@ funding-bot/
 | P0-T06 | Alert Telegram | Bắn test message | Nhận < 10s | ⬜ | |
 | P0-T07 | Alert SMS/email | Bắn test message | Nhận < 60s | ⬜ | |
 | P0-T08 | Time drift | So `time` API với local | Lệch < 1s | ⬜ | |
-| P0-T09 | UPS failover | Rút điện nguồn | Máy không tắt, bot vẫn chạy | ⬜ | |
-| P0-T10 | 4G failover | Rút WAN | Bot vẫn kết nối trong < 30s | ⬜ | |
+| P0-T09 | Firewall VPS | Scan port từ ngoài | Chỉ SSH/Tailscale; 8080 không lộ | ⬜ | |
+| P0-T10 | Systemd restart | Kill process bot | Tự lên lại < 10s | ⬜ | |
 | P0-T11 | Secret không vào git | `git grep -i "api_key\|secret"` | 0 kết quả | ⬜ | |
 | P0-T12 | Testnet hoạt động | Đặt/hủy 1 lệnh testnet | Khớp bình thường | ⬜ | |
+| P0-T13 | Backup DB | Chạy backup + restore thử | File có, restore OK | ⬜ | |
 
 ### 0.5 Kết quả test (biên bản)
 
@@ -128,7 +152,7 @@ funding-bot/
 |---|---|
 | Ngày chạy | |
 | Người chạy | |
-| Pass / Fail | __ / 12 |
+| Pass / Fail | __ / 13 |
 | Bằng chứng (link log/ảnh/commit) | |
 | Quyết định | ⬜ Đạt phase 0 / ⬜ Chạy lại / ⬜ Dừng |
 
@@ -137,7 +161,8 @@ funding-bot/
 - **BNB phải nằm ngoài $500.** Nếu trừ vào buffer, buffer còn ~$15 → vi phạm ngưỡng 6%, phải giảm notional.
 - **Cross margin là bắt buộc.** Isolated + không auto-add margin → buffer không cứu được leg short (§10.2).
 - **Không dùng API key có quyền rút** cho bot, kể cả khi tiện.
-- **Không chạy bot trên máy không UPS/4G** — mất kết nối dài = mù vị thế (§12.3).
+- **VPS là single point of failure.** VPS chết = bot + UI cùng mất → bắt buộc dead-man ping ngoài + backup DB ngày (§12.3).
+- **UI không tạo ở phase này.** Chỉ `.env`, config và script check key; UI bắt đầu Phase 2.
 
 ---
 
@@ -209,13 +234,13 @@ funding-bot/
 
 ---
 
-## PHASE 2 — B1a: INGEST + FEATURE + SCREENER
+## PHASE 2 — B1a: INGEST + FEATURE + SCREENER + UI READ-ONLY
 
-**Mục tiêu:** có service chạy 24/7, kéo dữ liệu sạch, tính điểm và xuất danh sách ứng viên giống hệt backtest.
+**Mục tiêu:** có service chạy 24/7, kéo dữ liệu sạch, tính điểm, xuất danh sách ứng viên giống hệt backtest — và **UI read-only** để nhìn dữ liệu.
 
-**Tham chiếu kế hoạch:** §5 (bộ lọc), §6 (backtest), §7.1–7.3 (kiến trúc & API), §15.2 (thresholds).
+**Tham chiếu kế hoạch:** §5 (bộ lọc), §6 (backtest), §7.1–7.3 (kiến trúc & API), **§7.4 (UI realtime)**, §15.2 (thresholds).
 
-**Giải thích cơ bản:** Đây là "mắt" của hệ. Nếu screener lệch backtest, mọi bước sau vô nghĩa. Yêu cầu quan trọng nhất: **parity** giữa kết quả live và kết quả backtest trên cùng thời điểm.
+**Giải thích cơ bản:** Đây là "mắt" của hệ. Nếu screener lệch backtest, mọi bước sau vô nghĩa. Yêu cầu quan trọng nhất: **parity** giữa kết quả live và kết quả backtest trên cùng thời điểm. UI Phase 2 chỉ để nhìn, **chưa có STOP**. Các file `ui/` chỉ được tạo ở phase này.
 
 ### 2.1 Các bước thực hiện
 
@@ -227,6 +252,9 @@ funding-bot/
 - [ ] **2.1.6** Backoff/retry khi 429/5xx; không retry mù.
 - [ ] **2.1.7** Report ngày: top ứng viên, lý do loại, trạng thái dữ liệu.
 - [ ] **2.1.8** Healthcheck: độ mới dữ liệu, số symbol, lỗi ingest.
+- [ ] **2.1.9** Dựng `ui/`: FastAPI + SSE đọc SQLite; endpoint `/healthz`, `/api/stream`, `/api/candidates`; không đưa key xuống browser.
+- [ ] **2.1.10** Trang HTML: header status + countdown funding, bảng ứng viên, funding thị trường; dark theme, responsive.
+- [ ] **2.1.11** `systemd` service `funding-ui` riêng; truy cập qua Tailscale; không mở port ra internet.
 
 ### 2.2 Kết quả cần đạt
 
@@ -235,6 +263,9 @@ funding-bot/
 - [ ] Không có gap dữ liệu > 2 kỳ funding cho symbol trong universe.
 - [ ] Restart service không mất state, không nhân đôi dữ liệu.
 - [ ] Report ngày đọc được bởi người không mở code.
+- [ ] UI cập nhật trạng thái **≤ 2 giây** (SSE), candidates **≤ 60 giây**.
+- [ ] UI **không** chứa API key/secret; chỉ read-only, không nút đặt lệnh.
+- [ ] UI chết không làm screener/bot dừng.
 
 ### 2.3 Checklist test
 
@@ -252,6 +283,10 @@ funding-bot/
 | P2-T10 | Thiếu depth | Symbol book mỏng | Không chọn hoặc cảnh báo | ⬜ | |
 | P2-T11 | Latency | Đo từ ingest → screener | < 5 phút | ⬜ | |
 | P2-T12 | Report ngày | Mở file report | Đủ top, lý do loại, healthcheck | ⬜ | |
+| P2-T13 | UI realtime | Mở UI, đo update | ≤ 2s | ⬜ | |
+| P2-T14 | Không lộ key | Grep HTML/JS + Network tab | 0 secret | ⬜ | |
+| P2-T15 | Auth/Tailscale | Truy cập từ ngoài | Bị chặn | ⬜ | |
+| P2-T16 | UI read-only | Thử POST order vào UI | 404/405; không có nút | ⬜ | |
 
 ### 2.4 Kết quả test (biên bản)
 
@@ -259,7 +294,7 @@ funding-bot/
 |---|---|
 | Ngày chạy | |
 | Người chạy | |
-| Pass / Fail | __ / 12 |
+| Pass / Fail | __ / 16 |
 | Số symbol universe | |
 | Số ứng viên pass / ngày | |
 | Bằng chứng (log, report) | |
@@ -270,14 +305,15 @@ funding-bot/
 - **Parity là điều kiện cứng.** Lệch > 0 ứng viên phải tìm nguyên nhân trước khi tiếp tục.
 - Baseline 10,95% **không trừ khỏi P&L**, chỉ dùng cho excess/score (§5.2 note).
 - Nếu universe < 3 ứng viên nhiều ngày: ghi nhận, không hạ chuẩn để có lệnh.
+- **UI Phase 2 chỉ read-only.** Không thêm nút STOP/mua/bán; STOP thuộc Phase 3. Không tạo file UI trước phase này.
 
 ---
 
-## PHASE 3 — B1b: EXECUTOR + RECONCILER + WATCHDOG
+## PHASE 3 — B1b: EXECUTOR + RECONCILER + WATCHDOG + UI POSITIONS/STOP
 
-**Mục tiêu:** bot tự vào/ra 2 leg an toàn, tự đối soát, tự dừng khi bất thường — không cần người bấm lệnh.
+**Mục tiêu:** bot tự vào/ra 2 leg an toàn, tự đối soát, tự dừng khi bất thường — không cần người bấm lệnh; UI hiển thị vị thế/PnL và có **STOP**.
 
-**Tham chiếu kế hoạch:** §7.1 (7 khối + Watchdog), §8 (L3, lớp giám sát, runbook), §8.2 (runbook), §8.3 (điều kiện bật live), §10.3 (kill switch), §11 B1.
+**Tham chiếu kế hoạch:** §7.1 (7 khối + Watchdog), **§7.4 (UI)**, §8 (L3, lớp giám sát, runbook), §8.2 (runbook), §8.3 (điều kiện bật live), §10.3 (kill switch), §11 B1.
 
 **Giải thích cơ bản:** Rủi ro lớn nhất là **lệch chân** (leg 1 khớp, leg 2 fail) và **state lệch sàn**. Vì vậy executor phải idempotent, có rollback; reconciler phải chạy độc lập; watchdog phải phát hiện bot chết và báo ngay.
 
@@ -292,7 +328,7 @@ funding-bot/
 - [ ] **3.1.7** Buffer manager: auto transfer Spot ↔ Futures khi buffer < 50% nhu cầu; không transfer nếu đang có lệnh treo.
 - [ ] **3.1.8** Kill switch theo §10.3; người không override được.
 - [ ] **3.1.9** Audit log bất biến: order, fill, retry, override, transfer, alert.
-- [ ] **3.1.10** Dashboard + alert P1/P2/P3; report ngày.
+- [ ] **3.1.10** UI Phase 3: positions 2 leg + delta, funding hiện tại/kế tiếp, PnL attribution, reconcile diff, alert log; **STOP ALL** confirm 2 bước; không nút mua/bán.
 - [ ] **3.1.11** Cơ chế **resume sau P1 cần người xác nhận** (`resume_after_p1_requires_human: true`).
 
 ### 3.2 Kết quả cần đạt
@@ -303,6 +339,8 @@ funding-bot/
 - [ ] Kill switch + dead-man hoạt động trong ≤ 5 phút kể từ sự cố giả lập.
 - [ ] Không có đường nào để bot mở > $125/order hoặc > 3 coin.
 - [ ] Mọi alert P1 tới điện thoại trong < 15 giây.
+- [ ] UI hiển thị đúng 2 leg + PnL khớp report ±1%; cập nhật ≤ 2 giây.
+- [ ] STOP từ UI dừng bot ≤ 5 giây, có audit log; UI chết không ảnh hưởng bot.
 
 ### 3.3 Checklist test (matrix bắt buộc)
 
@@ -328,6 +366,10 @@ funding-bot/
 | P3-T18 | DB down | Tắt DB | Bot dừng an toàn, không mất state | ⬜ | |
 | P3-T19 | Clock skew | Lệch giờ 30s | Không gửi lệnh sai timestamp | ⬜ | |
 | P3-T20 | Resume sau P1 | Sau sự cố | Không tự mở lại khi chưa xác nhận | ⬜ | |
+| P3-T21 | UI positions | So UI với state/report | Khớp 2 leg, PnL ±1% | ⬜ | |
+| P3-T22 | STOP từ UI | Bấm STOP + confirm | Dừng ≤ 5s, audit log | ⬜ | |
+| P3-T23 | Không nút mua/bán | Kiểm UI + API | Không có endpoint đặt lệnh | ⬜ | |
+| P3-T24 | UI chết | Tắt funding-ui | Bot vẫn chạy bình thường | ⬜ | |
 
 ### 3.4 Kết quả test (biên bản)
 
@@ -335,7 +377,7 @@ funding-bot/
 |---|---|
 | Ngày chạy | |
 | Người chạy | |
-| Pass / Fail | __ / 20 |
+| Pass / Fail | __ / 24 |
 | Reconcile 24h | diff = 0? |
 | Alert P1 latency | |
 | Bằng chứng (log, video, commit) | |
@@ -347,6 +389,7 @@ funding-bot/
 - **Không sửa tay lệnh bot đang chạy** — chỉ kill/blacklist (§11 luật cứng).
 - **Reconciler phải chạy process riêng**, không chung vòng lặp executor.
 - Nếu bất kỳ test P3-T01/P3-T05/P3-T12 fail → **không** sang Phase 4.
+- UI chỉ có 1 nút **STOP** (giảm rủi ro); không thêm nút mua/bán. STOP phải ghi audit và không được là đường dừng duy nhất.
 
 ---
 
@@ -366,6 +409,7 @@ funding-bot/
 - [ ] **4.1.4** Đo slippage giả định vs model 0,1%/side.
 - [ ] **4.1.5** Diễn tập: kill switch, dead-man, restart giữa vị thế, mất mạng.
 - [ ] **4.1.6** So sánh danh sách dry-run với backtest cùng ngày.
+- [ ] **4.1.7** Quan sát UI trong dry-run: trạng thái DRY, candidates, countdown; xác nhận **không có** nút STOP/mua/bán.
 
 ### 4.2 Kết quả cần đạt
 
@@ -375,6 +419,7 @@ funding-bot/
 - [ ] **0 sự cố P1**; mọi P2 có root-cause.
 - [ ] Kill switch + dead-man diễn tập thành công.
 - [ ] Reconcile diff = 0 toàn bộ 7 ngày.
+- [ ] UI hiển thị đúng trạng thái dry-run và không gửi lệnh.
 
 ### 4.3 Checklist test
 
@@ -392,6 +437,7 @@ funding-bot/
 | P4-T10 | Alert test | Bắn P1/P2 | Nhận đúng kênh | ⬜ | |
 | P4-T11 | Audit log | Kiểm 1 episode | Đủ order/fill/retry | ⬜ | |
 | P4-T12 | Báo cáo ngày | Mở report | Đủ PnL, funding, lỗi | ⬜ | |
+| P4-T13 | UI dry-run | Mở UI khi DRY_RUN=true | Hiện DRY, không có nút lệnh | ⬜ | |
 
 ### 4.4 Kết quả test (biên bản)
 
@@ -399,7 +445,7 @@ funding-bot/
 |---|---|
 | Ngày chạy | |
 | Người chạy | |
-| Pass / Fail | __ / 12 |
+| Pass / Fail | __ / 13 |
 | Số episode giấy | |
 | Slippage TB / p90 | |
 | Bằng chứng (log, report) | |
@@ -430,6 +476,7 @@ funding-bot/
 - [ ] **5.1.5** Đo slippage thực từng lệnh.
 - [ ] **5.1.6** Review tuần: PnL attribution, phí, funding, lỗi.
 - [ ] **5.1.7** **Không** thêm coin, **không** tăng size, **không** bật 2x trong phase này.
+- [ ] **5.1.8** Dùng UI làm nguồn giám sát chính; mỗi ngày đối chiếu UI với app sàn.
 
 ### 5.2 Kết quả cần đạt
 
@@ -440,6 +487,7 @@ funding-bot/
 - [ ] DD thực **< 5%** vốn.
 - [ ] Không có lần nào phải sửa tay lệnh.
 - [ ] Slippage thực ≤ 0,2%/side.
+- [ ] UI khớp vị thế/PnL thực tế ±1%.
 
 ### 5.3 Checklist test
 
@@ -455,6 +503,7 @@ funding-bot/
 | P5-T08 | Kill switch thực | Trigger nhỏ (nếu an toàn) | Đóng đúng, có log | ⬜ | |
 | P5-T09 | DD | Theo dõi ngày | < 5% | ⬜ | |
 | P5-T10 | Không sửa tay | Audit log | 0 manual order | ⬜ | |
+| P5-T11 | UI khớp thực tế | So UI với app sàn | Vị thế/PnL ±1% | ⬜ | |
 
 ### 5.4 Kết quả test (biên bản)
 
@@ -462,7 +511,7 @@ funding-bot/
 |---|---|
 | Ngày bắt đầu / kết thúc | |
 | Người trực | |
-| Pass / Fail | __ / 10 |
+| Pass / Fail | __ / 11 |
 | Funding thực / dự kiến | |
 | Slippage TB | |
 | P1 / P2 count | |
@@ -574,6 +623,7 @@ funding-bot/
 | P7-T09 | 0 P1 chưa root-cause | Có | ⬜ | |
 | P7-T10 | Alert/kill test trong 7 ngày | Có | ⬜ | |
 | P7-T11 | Nếu xét 2x: 30 ngày DD <5%, không chạm buffer | Có | ⬜ | |
+| P7-T12 | UI healthcheck uptime ≥99% trong 30 ngày (bổ sung của task) | Có | ⬜ | |
 
 ### 7.4 Kết quả test (biên bản)
 
@@ -581,7 +631,7 @@ funding-bot/
 |---|---|
 | Ngày review | |
 | Số ngày live | |
-| Pass / Fail | __ / 11 |
+| Pass / Fail | __ / 12 |
 | Net APR thực | |
 | Quyết định | ⬜ Giữ $500 / ⬜ Lên $1.000 / ⬜ Xét 2x / ⬜ Dừng |
 | Người ký | |
@@ -606,17 +656,17 @@ funding-bot/
 
 | Mức | Notional/leg | Coin | N/coin | Buffer | Hạ tầng | Việc phải làm thêm |
 |---|---|---|---|---|---|---|
-| $500 | $235 | 3 | $78 | $30 | Nhà + UPS/4G | — |
-| $1.000 | $470 | 5 | $94 | $60 | Nhà + watchdog ngoài | Thêm 2 coin; alert 2 kênh; maker leg spot |
-| $2.000 | $940 | 7 | $134 | $120 | VPS $5–6 + 4G | PnL attribution tự động; chaos drill; VPS |
-| $5.000 | $2.350 | 9 | $261 | $300 | VPS $10–12 + redundancy | Sub-account buffer; watchdog thứ 2; audit export |
+| $500 | $235 | 3 | $78 | $30 | VPS sẵn có (bot + UI) | — |
+| $1.000 | $470 | 5 | $94 | $60 | VPS sẵn có + backup | Thêm 2 coin; alert 2 kênh; maker leg spot |
+| $2.000 | $940 | 7 | $134 | $120 | VPS sẵn có + monitoring | PnL attribution tự động; chaos drill; hardening |
+| $5.000 | $2.350 | 9 | $261 | $300 | VPS sẵn có + redundancy ngoài | Sub-account buffer; ping/watchdog ngoài; audit export |
 
 ### 8.2 Kết quả cần đạt mỗi mức
 
 - [ ] Reconcile diff = 0 trong 30 ngày đầu ở mức mới.
 - [ ] Không P1; DD < 5% (mức $1k–$2k) hoặc < 4% ($5k).
 - [ ] Slippage không tăng > 0,05%/side so với mức trước.
-- [ ] Hạ tầng mới chạy ổn định ≥ 99,5% uptime.
+- [ ] **VPS hiện tại** chạy ổn định ≥ 99,5% uptime; redundancy/ping ngoài chỉ cần từ $5k.
 - [ ] Gate §12.4 được chạy lại trước mỗi lần nâng.
 
 ### 8.3 Checklist test (mỗi lần nâng)
@@ -631,8 +681,9 @@ funding-bot/
 | P8-T06 | Alert/kill test | Pass | ⬜ | |
 | P8-T07 | Uptime | ≥ 99,5% | ⬜ | |
 | P8-T08 | Slippage | Không tăng > 0,05% | ⬜ | |
-| P8-T09 | Gate §12.4 | Đủ 11 mục | ⬜ | |
+| P8-T09 | Gate §12.4 | Đủ 11 mục + UI uptime | ⬜ | |
 | P8-T10 | Rollback plan | Có, đã test | ⬜ | |
+| P8-T11 | UI mức vốn mới | Đúng vốn/notional | ⬜ | |
 
 ### 8.4 Kết quả test (biên bản)
 
@@ -640,7 +691,7 @@ funding-bot/
 |---|---|
 | Mức vốn | |
 | Ngày nâng | |
-| Pass / Fail | __ / 10 |
+| Pass / Fail | __ / 11 |
 | Vốn mới / notional | |
 | Người ký | |
 | Quyết định | ⬜ Đạt / ⬜ Quay lại mức cũ |
@@ -648,7 +699,7 @@ funding-bot/
 ### 8.5 Ghi chú & rủi ro
 
 - **Không nâng vốn và đổi chiến lược cùng lúc.** Mỗi lần chỉ đổi một biến.
-- Ở $5.000, VPS/redundancy là bắt buộc; ở $500–$1.000, VPS ăn phần lớn lãi (§12.3).
+- **VPS đã có sẵn ($0)**, nhưng vẫn là single point of failure: từ $5.000 thêm redundancy/ping ngoài; backup DB ngày ở mọi mức.
 - Không dùng đòn bẩy để "tăng tốc" — 2x chỉ sau gate riêng.
 
 ---
@@ -706,6 +757,12 @@ heartbeat_s: 30
 reconcile_s: 60
 deadman_s: 300
 max_order_notional: 125
+infra: existing_vps          # $0
+ui_transport: sse
+ui_refresh_s: 1
+ui_candidates_s: 60
+ui_allow_manual_orders: false
+ui_stop_requires_confirm: true
 ```
 
 ## PHỤ LỤC D — SIGN-OFF
@@ -729,6 +786,7 @@ max_order_notional: 125
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
 | 1.0 | 24/11/2026 | Tạo task từ kế hoạch v2.2: $500, 1x, 3 coin, L3; 9 phase; checklist test + biên bản kết quả từng phase |
+| 1.1 | 24/11/2026 | Thêm **UI realtime trên VPS sẵn có** (§7.4): UI read-only Phase 2, positions/PnL/STOP Phase 3; bỏ phương án UPS/4G; thêm **quy tắc cấm tạo file trước phase**; cập nhật test (0: 13, 2: 16, 3: 24, 4: 13, 5: 11, 7: 12, 8: 11) |
 
 ---
 

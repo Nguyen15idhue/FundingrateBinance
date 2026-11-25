@@ -125,8 +125,9 @@ class Settings:
         return self.env_bool("KILL_SWITCH_ENABLED", True)
 
     @property
-    def use_testnet(self) -> bool:
-        return self.env_bool("BINANCE_USE_TESTNET", False)
+    def use_demo(self) -> bool:
+        """True = dùng Binance Demo Trading (demo.binance.com), không phải tiền thật."""
+        return self.env_bool("BINANCE_USE_DEMO", False)
 
     # ---------- keys ----------
     @property
@@ -145,11 +146,30 @@ class Settings:
     def readonly_secret(self) -> str:
         return self.env("BINANCE_READONLY_SECRET")
 
+    @property
+    def demo_key(self) -> str:
+        return self.env("BINANCE_DEMO_API_KEY")
+
+    @property
+    def demo_secret(self) -> str:
+        return self.env("BINANCE_DEMO_API_SECRET")
+
+    @property
+    def demo_readonly_key(self) -> str:
+        return self.env("BINANCE_DEMO_READONLY_KEY")
+
+    @property
+    def demo_readonly_secret(self) -> str:
+        return self.env("BINANCE_DEMO_READONLY_SECRET")
+
     def has_trade_keys(self) -> bool:
         return bool(self.api_key and self.api_secret)
 
     def has_readonly_keys(self) -> bool:
         return bool(self.readonly_key and self.readonly_secret)
+
+    def has_demo_keys(self) -> bool:
+        return bool(self.demo_key and self.demo_secret)
 
     # ---------- kiểm tra ----------
     def validate(self) -> list[str]:
@@ -189,9 +209,11 @@ class Settings:
             warnings.append("LIVE_TRADING_ENABLED=true nhưng DRY_RUN=true — bot sẽ chỉ chạy mô phỏng.")
         if self.live_trading_enabled and not self.has_trade_keys():
             warnings.append("LIVE_TRADING_ENABLED=true nhưng chưa có BINANCE_API_KEY/SECRET.")
-        if self.use_testnet and self.live_trading_enabled:
-            warnings.append("Đang bật testnet nhưng LIVE_TRADING_ENABLED=true — kiểm tra lại ý định.")
-        if not self.has_trade_keys():
+        if self.use_demo and self.live_trading_enabled:
+            warnings.append("Đang bật demo nhưng LIVE_TRADING_ENABLED=true — kiểm tra lại ý định.")
+        if self.use_demo and not self.has_demo_keys():
+            warnings.append("BINANCE_USE_DEMO=true nhưng chưa có BINANCE_DEMO_API_KEY/SECRET.")
+        if not self.use_demo and not self.has_trade_keys():
             warnings.append("Chưa có key Binance — các kiểm tra private sẽ bị bỏ qua.")
         return warnings
 

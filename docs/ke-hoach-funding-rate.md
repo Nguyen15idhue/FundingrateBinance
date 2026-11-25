@@ -1,12 +1,13 @@
 # KẾ HOẠCH HỆ THỐNG HARVEST FUNDING RATE (FR)
 
-**Phiên bản:** 2.2  
+**Phiên bản:** 2.4  
 **Ngày:** 24/11/2026  
 **Phạm vi:** Binance USDⓈ-M Perpetual  
 **Vốn khởi điểm:** **$500** (v1.0: 200 triệu VND ~ $7.500)  
+**Hạ tầng:** **VPS sẵn có**, chạy 24/7, không tính vào chi phí  
 **Mục tiêu:** Thu funding rate delta-neutral, **L3 tự động hoàn toàn có giám sát**, hướng tới vận hành ổn định.
 
-> **Thay đổi chính ở v2.x:** vốn khởi điểm $500; bỏ lộ trình chạy chậm (alert-only → shadow → canary nhiều tháng); chỉ **backtest + xây automation + dry-run ~3–4 tuần** rồi **live luôn $500**; **L3 ngay từ lệnh live đầu tiên**, không bán tự động/thủ công; **1x trước, 2x chỉ sau 60–90 ngày đạt gate**; thêm bảng nâng vốn $1k/$2k/$5k. Lý do và ngân sách thiệt hại: §12.5.
+> **Thay đổi chính ở v2.x:** vốn khởi điểm $500; bỏ lộ trình chạy chậm (alert-only → shadow → canary nhiều tháng); chỉ **backtest + xây automation + dry-run ~3–4 tuần** rồi **live luôn $500**; **L3 ngay từ lệnh live đầu tiên**, không bán tự động/thủ công; **1x trước, 2x chỉ sau 60–90 ngày đạt gate**; **dashboard realtime trên VPS sẵn có (§7.4)**; thêm bảng nâng vốn $1k/$2k/$5k. Lý do và ngân sách thiệt hại: §12.5.
 
 > **Miễn trừ:** Tài liệu này là phân tích kỹ thuật và kế hoạch vận hành, không phải lời khuyên đầu tư. Mọi số liệu là snapshot tại thời điểm ghi và sẽ thay đổi. Chỉ dùng vốn chấp nhận mất được.
 
@@ -228,7 +229,7 @@ Net giá = X × (Basis_0 − Basis_T)
 | Borrow (nếu FR âm) | 0,02–0,5%/ngày |
 | Opportunity cost | 3–5%/năm |
 | Vốn chia đôi | ×1,1–1,33 |
-| VPS | $5–20/tháng |
+| VPS | Đã có sẵn — $0 (không tính vào chi phí) |
 | Thuế | Tùy quy định |
 
 ### 4.3 Cost profiles
@@ -413,7 +414,7 @@ liquidity_factor = min(1, volume / $20M)
 | Bước giá BTCUSDT | min qty 0,001 ≈ $100+ | **Không dùng BTC/ETH ở $500** |
 | Làm tròn qty | coin giá cao bị thô | Ưu tiên coin $0,1–20 |
 | Phí cố định (rút/nạp, network) | $1–2/lần | Gom chuyển tiền 1 lần/tháng |
-| VPS | $5/tháng = ~85% lãi $500 | Dùng máy nhà + UPS/4G + dead-man ping ngoài; lên VPS từ $2.000 |
+| VPS | Đã có sẵn, $0 | Chạy bot + UI 24/7; vẫn cần dead-man ping ngoài + backup DB ngày |
 | Buffer nằm chờ | 6% vốn không sinh lãi | APR trên vốn thấp hơn APR notional (~0,47×) |
 | BNB giảm phí | Phải có BNB ở **cả** ví Spot và Futures | Giữ $10–20 BNB mỗi ví |
 
@@ -481,6 +482,59 @@ GET /fapi/v1/depth?symbol=&limit=
 GET /fapi/v1/exchangeInfo
 ```
 
+### 7.4 UI / Dashboard realtime (VPS 24/7)
+
+**Quyết định:** dùng **VPS sẵn có** (không tính vào chi phí), chạy cả bot và dashboard 24/7. UI là **dashboard giám sát**, không phải bàn giao dịch.
+
+**Stack tối giản:**
+
+```text
+Bot (Python) ── ghi state ──> SQLite (WAL)
+                                  │
+Dashboard (FastAPI) ── SSE 1s ──> Browser
+        │
+        └── POST /stop (chỉ dừng, không mua/bán)
+```
+
+- FastAPI + **SSE** + 1 file HTML (Tailwind/Pico + uPlot/Chart.js). Không React, không npm, không build frontend.
+- 2 service `systemd` riêng: `funding-bot` và `funding-ui` — UI chết không làm bot chết.
+- Truy cập qua **Tailscale** (khuyến nghị) hoặc Caddy HTTPS + basic auth. **Không mở port ra internet.**
+- API key **không bao giờ** xuống browser; UI chỉ đọc state/DB, không gọi sàn trực tiếp.
+
+**Độ "realtime" thực tế:**
+
+| Tầng | Nguồn | Độ trễ |
+|---|---|---|
+| Giá / funding dự kiến | WS `!markPrice@arr@1s` (có mark price + funding rate `r`) | ~1 giây |
+| Vị thế / lệnh / số dư | User Data Stream hoặc REST poll | 1–3 giây |
+| Trạng thái chiến lược, PnL, reconcile | DB nội bộ + tính toán | 1–5 giây |
+| Danh sách ứng viên | Screener chạy nền | 60 giây |
+
+> Funding **rate** realtime được; tiền funding chỉ chốt mỗi kỳ (1h/4h/8h). UI phải tách "dự kiến" và "đã nhận".
+
+**Màn hình bắt buộc:**
+
+| Vùng | Nội dung |
+|---|---|
+| Header | L3 running, uptime, heartbeat, next funding countdown, DRY/LIVE, DD |
+| KPI | Equity, net PnL ngày/30d, funding nhận, phí, deployment rate |
+| Positions | Coin, notional 2 leg, entry/mark, funding hiện tại/kế tiếp, unrealized, khoảng cách liquidation, tuổi vị thế |
+| Candidates | Score, APR 7d/14d, forward, net, excess, CV, volume, lý do loại |
+| Charts | Equity curve, funding theo ngày, PnL attribution (funding/phí/basis) |
+| System | Reconcile diff, API latency, lỗi 24h, alert log |
+| Controls | **STOP ALL** (confirm), pause entries, blacklist coin |
+
+**Nguyên tắc UI:**
+- Chỉ read-only + **1 nút STOP** (giảm rủi ro). Không có nút mua/bán tay.
+- STOP yêu cầu xác nhận 2 bước; ghi audit log.
+- UI không được là đường duy nhất để dừng bot: kill switch vẫn chạy trong bot.
+
+**Thứ tự build (gắn với phase):**
+1. **Phase 2:** UI read-only — system status, funding thị trường, bảng ứng viên, countdown.
+2. **Phase 3:** thêm positions, PnL attribution, reconcile, STOP.
+3. **Phase 5:** thêm lịch sử 30/90 ngày, export CSV.
+
+
 ---
 
 ## 8. MỨC TỰ ĐỘNG HÓA — L3 TỪ NGÀY ĐẦU
@@ -511,7 +565,7 @@ GET /fapi/v1/exchangeInfo
 | Audit | Log bất biến mọi order/fill/retry/override | Truy vết được từng lệnh bằng correlation id |
 
 **Vận hành giám sát:**
-- Dashboard realtime + alert Telegram/SMS cho P1/P2.
+- **Dashboard realtime (§7.4)** + alert Telegram/SMS cho P1/P2. UI chỉ đọc + **STOP**; không có nút mua/bán.
 - **2 tuần đầu: người trực 24/7.** Sau đó on-call, SLA phản hồi P1 ≤ 15 phút.
 - Với một người vận hành, "trực 24/7" nghĩa là **alert phải đánh thức được + dead-man tự xử lý**, không phải ngồi nhìn màn hình.
 - Review 15 phút/ngày; post-mortem mọi bất thường trong 48h.
@@ -535,7 +589,7 @@ GET /fapi/v1/exchangeInfo
 **Vì sao L3 an toàn hơn L2 ở quy mô $500:** rủi ro lớn nhất nằm ở khoảng giữa 2 leg (leg 1 khớp, leg 2 fail). Để người bấm giữa 2 leg làm **tăng** thời gian lệch chân, không giảm. Tự động + rollback + reconcile + hard cap tốt hơn "bấm tay cẩn thận". Ngoài ra cùng một codebase dùng tiếp ở $1k–$5k, nên viết đúng ngay từ đầu không phải làm lại.
 
 **Bắt buộc trước khi bật L3 live:**
-1. **Dry-run ≥ 7 ngày** trên dữ liệu thật (không gửi lệnh) + **testnet** cho toàn bộ luồng order/rollback.
+1. **Dry-run ≥ 7 ngày** trên dữ liệu thật (không gửi lệnh) + **Demo Trading** cho toàn bộ luồng order/rollback.
 2. Test bắt buộc: leg 2 fail, partial fill, timeout, API 429/5xx, mất mạng, sai số dư, interval đổi giữa chừng, funding flip đúng lúc.
 3. Mỗi loại lỗi phải có hành vi xác định: rollback, retry có giới hạn, hay flatten — không có "treo chờ người".
 4. Kill switch + dead-man switch đã test bằng giả lập sự cố.
@@ -698,8 +752,8 @@ Cap tổng exposure cùng beta ≤ 60% notional
 | Bước | Thời lượng | Làm gì | Điều kiện qua |
 |---|---|---|---|
 | **B0 — Backtest** | 5–7 ngày | 6–12 tháng dữ liệu; mô phỏng đúng $500 (3 coin, $78/leg, perp 1x, buffer 6%, min notional, cost P2 0,34%, slippage 0,10%/side); ra phân phối tháng, DD, tỷ lệ tháng âm | Net APR ≥ 9% trên vốn sau chiết khấu; ≥ 70% tháng dương; DD stress ≤ 4% |
-| **B1 — Xây automation + dry-run** | 10–14 ngày | Viết executor 2 leg, reconciler, watchdog, kill switch, alert, dashboard; testnet toàn bộ luồng; **dry-run ≥ 7 ngày** trên dữ liệu thật (không gửi lệnh) | Pass checklist §8; reconcile diff = 0; alert + kill switch + dead-man đã test; 0 lỗi state |
-| **R1 — Live $500 (L3)** | Tuần 4–5 | **2 coin × $78 notional/leg, perp 1x, bot tự chạy hoàn toàn**; người trực 24/7, không xác nhận lệnh | Funding thực khớp kỳ vọng ±20%; 0 sự cố P1; reconcile diff = 0 |
+| **B1 — Xây automation + dry-run** | 10–14 ngày | Viết executor 2 leg, reconciler, watchdog, kill switch, alert; **UI read-only (Phase 2) → UI positions/PnL/STOP (Phase 3)**; Demo Trading toàn bộ luồng; **dry-run ≥ 7 ngày** trên dữ liệu thật (không gửi lệnh) | Pass checklist §8; reconcile diff = 0; alert + kill switch + dead-man đã test; 0 lỗi state; UI realtime §7.4 chạy ổn |
+| **R1 — Live $500 (L3)** | Tuần 4–5 | **2 coin × $78 notional/leg, perp 1x, bot tự chạy hoàn toàn**; người trực 24/7 qua dashboard + alert, không xác nhận lệnh | Funding thực khớp kỳ vọng ±20%; 0 sự cố P1; reconcile diff = 0; UI hiển thị đúng vị thế/PnL |
 | **R2 — Live đủ cấu hình** | Tuần 6–8 | 3 coin, notional 0,47 vốn, giữ 1–4 tuần, vẫn 1x + L3 | — |
 | **G — Review nâng vốn** | Ngày 60–90 | Đối chiếu gate §12.4, quyết định lên $1.000 hay giữ nguyên | Xem §12.4 |
 
@@ -710,10 +764,10 @@ Cap tổng exposure cùng beta ≤ 60% notional
 - Kill switch do máy thực thi; người không override.
 - Không deploy thay đổi trong 2h trước funding hoặc khi realized vol > 2,5× entry.
 - Mọi thay đổi rule/code phải qua dry-run ≥ 24h trước khi live.
-- Không chạy auto trên đường truyền không có UPS + 4G backup (hoặc VPS có SLA).
+- Bot + UI chạy trên **VPS 24/7**; bắt buộc **dead-man ping ngoài** (không đặt cùng VPS) + **backup DB ngày**.
 - **Không bật 2x trước ngày 60/gate** — kể cả khi thấy lãi tốt.
 
-> **Vì sao bỏ được phase chậm:** dry-run + testnet thay thế shadow/canary cho phần **kỹ thuật**. Phần chỉ đo được bằng tiền thật (slippage, fill, funding thực) thì $500 đo trực tiếp với chi phí tối đa ~$100–150 (§12.5) — rẻ hơn 3–5 tháng chờ và không làm tăng độ chính xác của backtest.
+> **Vì sao bỏ được phase chậm:** dry-run + Demo Trading thay thế shadow/canary cho phần **kỹ thuật**. Phần chỉ đo được bằng tiền thật (slippage, fill, funding thực) thì $500 đo trực tiếp với chi phí tối đa ~$100–150 (§12.5) — rẻ hơn 3–5 tháng chờ và không làm tăng độ chính xác của backtest.
 
 ---
 
@@ -745,15 +799,15 @@ Cap tổng exposure cùng beta ≤ 60% notional
 | Universe | Mid-cap giá thấp; **loại BTC/ETH** | Thêm ETH; BTC còn thô | BTC/ETH dùng được | Đủ universe |
 | Leverage | 1x | 1x | 1x | 1x |
 | Phí | Taker + BNB | Ưu tiên maker leg spot | Maker + BNB | Maker, theo dõi VIP1 |
-| Hạ tầng | Máy nhà + UPS/4G + dead-man ping ngoài | Máy nhà + UPS/4G + watchdog ngoài | VPS $5–6 + 4G backup | VPS $10–12 + redundancy |
+| Hạ tầng | VPS sẵn có (bot + UI) + ping ngoài | VPS sẵn có + backup | VPS sẵn có + monitoring | VPS sẵn có + redundancy ngoài |
 | Tự động hóa | **L3 toàn phần** | **L3 toàn phần** | **L3 + chaos test định kỳ** | **L3 + sub-account + redundancy** |
 | Kỳ vọng/tháng (~10,5% APR) | $4,4 | $8,8 | $17,5 | $43,8 |
-| Sau chi phí cố định | **$4** | **$8–9** | **$12–13** | **$33–34** |
+| Sau chi phí cố định | **$4–5** | **$8–9** | **$12–13** | **$33–34** |
 | Kill switch DD | −$100 (20%) | −$200 (20%) | −$300 (15%) | −$600 (12%) |
 
 **Thay đổi cụ thể từng bước:**
 
-**$500 → $1.000 (giữ nguyên L3, chưa cần VPS):**
+**$500 → $1.000 (giữ nguyên L3, VPS sẵn có):**
 - 3 → 5 coin; thêm 1–2 coin APR thấp nhưng ổn định làm trụ.
 - Bắt đầu đặt **maker ở leg spot** (tiết kiệm ~0,025%/side).
 - Alert 2 kênh (Telegram + SMS/email); đưa test automation vào CI.
@@ -763,11 +817,11 @@ Cap tổng exposure cùng beta ≤ 60% notional
 - 5 → 7 coin; **đo slippage thực theo từng coin**, loại coin có slippage > 0,2%/side.
 - **PnL attribution tự động** (funding vs basis vs phí) — bắt buộc trước khi lên $5k.
 - **Chaos drill hàng tháng:** giả lập API 429/5xx, mất mạng, leg 2 fail, reconcile lệch.
-- Chuyển bot lên **VPS $5–6 + 4G backup**; bắt đầu deploy canary cho code (dry-run 24h trước khi bật).
+- **Hardening VPS:** firewall, NTP, backup DB ngày, `systemd Restart=always`; bật UI đầy đủ (positions/PnL/STOP).
 
 **$2.000 → $5.000:**
 - 7 → 9 coin; **sub-account/ví riêng cho buffer**; auto transfer + đối soát.
-- Thêm **instance watchdog thứ 2 (read-only)** ở máy/VPS khác để phát hiện bot chính chết.
+- Thêm **watchdog/ping ngoài độc lập** (không cùng VPS); nếu có VPS thứ 2 thì đặt bản read-only để phát hiện bot chính chết.
 - Audit trail export; sổ thuế & đối soát; theo dõi volume 30 ngày tiến tới VIP1 (ở $5k còn rất xa).
 
 **Không thay đổi theo quy mô:** chiến lược, bộ lọc, ngưỡng APR/CV/decay, cấu trúc 2 leg, **1x + buffer 6%**, **mức L3**. Quy mô chỉ đổi **số coin, hạ tầng/redundancy và chi phí cố định**.
@@ -777,8 +831,9 @@ Cap tổng exposure cùng beta ≤ 60% notional
 ### 12.3 Chi phí ẩn ở quy mô nhỏ
 
 - Phí giao dịch tính theo **% notional** → gần như không đổi theo quy mô; break-even ngày giữ nguyên.
-- **Chi phí cố định mới là vấn đề:** VPS $5/tháng ăn **>100% lãi kỳ vọng ở $500**, ~57% ở $1.000, ~29% ở $2.000 và ~23% ở $5.000. Vì vậy ở $500–$1.000 ưu tiên **máy nhà + UPS/4G + dead-man ping ngoài**; từ $2.000 mới thuê VPS.
-- **Uptime là điều kiện của L3:** mất kết nối 5 phút không nguy hiểm bằng mất kết nối 5 giờ mà không ai biết. Ưu tiên **heartbeat + alert + dead-man** hơn mọi tối ưu tốc độ. Nếu máy nhà không đạt (UPS < 30 phút, không 4G) → buộc lên VPS $5 và chấp nhận lãi ròng âm nhẹ (~−$0,6/tháng) ở mức $500.
+- **VPS đã có sẵn → $0.** Không tính vào chi phí. Nhưng VPS là **single point of failure**: VPS chết là bot + UI cùng mất → bắt buộc **dead-man ping ngoài** (dịch vụ khác) + **backup DB ngày**.
+- Nếu sau này phải thuê VPS, nó sẽ ăn ~90–100% lãi ở $500 và ~57% ở $1.000 — chỉ đáng từ $2.000.
+- **Uptime là điều kiện của L3:** mất kết nối 5 phút không nguy hiểm bằng mất kết nối 5 giờ mà không ai biết. Ưu tiên **heartbeat + alert + dead-man** hơn mọi tối ưu tốc độ.
 - **Độ thô của size:** $78/leg ở $500 là mức tối thiểu thực tế; nhỏ hơn nữa thì min notional + làm tròn qty ăn vào edge.
 - **Buffer không sinh lãi:** 6% vốn nằm chờ → APR trên vốn thấp hơn APR notional (~0,47×).
 - **Chuyển tiền:** rút ra ngoài (on-chain) $1–2/lần → gom 1 lần/tháng; **transfer nội bộ Spot ↔ Futures miễn phí và do bot tự động**.
@@ -883,7 +938,7 @@ Không đạt → giữ nguyên thêm 30 ngày. Đạt 2 lần liên tiếp → 
 | Sửa tay lệnh bot đang chạy | State lệch, mất khả năng truy vết |
 | Deploy code sát giờ funding | Sự cố đúng lúc không được phép sai |
 | Người xác nhận giữa 2 leg | Lệch chân lâu hơn, lỗi nhiều hơn |
-| Chạy auto trên mạng nhà không UPS/4G | Mất kết nối = mù vị thế |
+| Chạy bot + UI trên 1 VPS không có ping ngoài | VPS chết = mù vị thế, không ai biết |
 
 ---
 
@@ -945,7 +1000,7 @@ capital_tiers:
     size_per_coin_max: 0.16
     leverage_max: 1
     futures_buffer_min_usd: 30
-    infrastructure: home_ups_4g_external_watchdog
+    infrastructure: existing_vps_external_watchdog
     automation: L3
     dd_kill: 0.20
   - capital_usd: 1000
@@ -956,7 +1011,7 @@ capital_tiers:
     size_per_coin_max: 0.10
     leverage_max: 1
     futures_buffer_min_usd: 60
-    infrastructure: home_ups_4g_external_watchdog
+    infrastructure: existing_vps_external_watchdog
     automation: L3
     dd_kill: 0.20
   - capital_usd: 2000
@@ -967,7 +1022,7 @@ capital_tiers:
     size_per_coin_max: 0.07
     leverage_max: 1
     futures_buffer_min_usd: 120
-    infrastructure: vps_5_6_4g
+    infrastructure: existing_vps_backup_monitoring
     automation: L3_chaos_tested
     dd_kill: 0.15
   - capital_usd: 5000
@@ -978,7 +1033,7 @@ capital_tiers:
     size_per_coin_max: 0.06
     leverage_max: 1
     futures_buffer_min_usd: 300
-    infrastructure: vps_10_12_redundant
+    infrastructure: existing_vps_redundant_external
     automation: L3_subaccount
     dd_kill: 0.12
 
@@ -1010,6 +1065,28 @@ automation:
   alert_test_days: 7
   max_order_notional_ratio: 0.25     # × vốn, hard cap trong code
   deploy_freeze_minutes_before_funding: 120
+
+infra:
+  mode: existing_vps             # VPS có sẵn, không tính vào chi phí
+  cost_usd_month: 0
+  timezone: UTC
+  ntp: true
+  firewall: true
+  access: tailscale              # hoặc caddy_basic_auth
+  backup_daily: true
+  services_separate: true        # funding-bot và funding-ui là 2 service
+
+ui:
+  enabled: true
+  host: 127.0.0.1
+  port: 8080
+  transport: sse
+  refresh_seconds: 1
+  candidates_refresh_seconds: 60
+  auth: tailscale
+  allow_manual_orders: false
+  stop_requires_confirm: true
+  expose_public: false
 ```
 
 ### 15.3 Thuật ngữ
@@ -1043,6 +1120,8 @@ automation:
 | 2.0 | 24/11/2026 | Vốn khởi điểm $500; bỏ phase chậm, chỉ backtest + mô phỏng rồi live; thêm bảng nâng vốn $1k/$2k/$5k; ràng buộc quy mô nhỏ; gate nâng vốn; ngân sách thiệt hại |
 | 2.1 | 24/11/2026 | Chuyển sang **L3 tự động hoàn toàn có giám sát** ngay từ live; bỏ L2/thủ công; thêm lớp giám sát, test matrix, dry-run/testnet bắt buộc; hạ tầng & redundancy theo quy mô |
 | 2.2 | 24/11/2026 | Chuyển cấu hình mặc định sang **1x**: spot $235 / futures $265 / margin $235 / buffer $30; notional 0,47 vốn; liquidate ~+113%; 2x chỉ sau gate 60–90 ngày |
+| 2.3 | 24/11/2026 | Thêm **UI realtime §7.4** trên **VPS sẵn có** (0 chi phí): FastAPI + SSE + 1 HTML, read-only + STOP; bỏ phương án máy nhà/UPS/4G; cập nhật hạ tầng, chi phí, YAML (`infra`, `ui`) |
+| 2.4 | 25/11/2026 | Thay **testnet** bằng **Demo Trading** (demo.binance.com): API key demo riêng, endpoint `demo-api`/`demo-fapi`; thêm giải thích 3 loại key (trade/read-only/demo) và giới hạn của demo |
 
 ---
 
