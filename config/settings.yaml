@@ -83,5 +83,5 @@ screener:
   request_workers: 6
 
 api:
-  recv_window: 5000
+  recv_window: 10000
   timeout_seconds: 15

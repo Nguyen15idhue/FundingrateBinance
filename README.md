@@ -52,6 +52,8 @@ Mặc định an toàn: `DRY_RUN=true`, `LIVE_TRADING_ENABLED=false`. Khi chạy
 
 > Demo Trading thay cho testnet cũ. Demo gần như cùng tính năng và dữ liệu sát live, nhưng **không đo được slippage/fill/funding thật** — mục đích là kiểm tra kỹ thuật (order lifecycle, rollback, reconcile).
 
+> Nếu bot chạy trên VPS, whitelist API key phải có **IP VPS `43.240.117.54`** (và IP nhà nếu chạy local). File `.env` phải lưu **UTF-8 không BOM**; không dùng `Set-Content -Encoding utf8` trên PowerShell 5.1 vì sẽ làm hỏng tiếng Việt.
+
 
 ## Chạy kiểm tra
 
