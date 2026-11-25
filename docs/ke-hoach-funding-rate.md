@@ -1,6 +1,6 @@
 # KẾ HOẠCH HỆ THỐNG HARVEST FUNDING RATE (FR)
 
-**Phiên bản:** 2.4  
+**Phiên bản:** 2.5  
 **Ngày:** 24/11/2026  
 **Phạm vi:** Binance USDⓈ-M Perpetual  
 **Vốn khởi điểm:** **$500** (v1.0: 200 triệu VND ~ $7.500)  
@@ -288,6 +288,9 @@ net_APR        = net_14d × 365 / 14
 - USDⓈ-M PERPETUAL, status `TRADING`.
 - Volume 24h ≥ **$5M** (nghiên cứu có thể ≥ $2M).
 - Ưu tiên top volume để đảm bảo capacity.
+- **Bắt buộc có cặp Spot USDT** (volume ≥ $1M) để hedge delta-neutral.
+
+> **Phase 1 finding (25/11/2026):** giao Spot + Futures chỉ còn **104 symbol**; 4 mã tham chiếu EVAA/AVAAI/PIEVERSE/PHAROS **không có Spot** → không thể hedge. Screen 283 symbol mở rộng hiện tại cho **0 ứng viên** 20–60% APR; backtest 180 ngày chỉ 1 episode. Cần quyết định venue/strategy trước Phase 2, **không hạ chuẩn** net APR.
 
 ### 5.2 Điều kiện vào (tất cả phải đạt)
 
@@ -1122,6 +1125,7 @@ ui:
 | 2.2 | 24/11/2026 | Chuyển cấu hình mặc định sang **1x**: spot $235 / futures $265 / margin $235 / buffer $30; notional 0,47 vốn; liquidate ~+113%; 2x chỉ sau gate 60–90 ngày |
 | 2.3 | 24/11/2026 | Thêm **UI realtime §7.4** trên **VPS sẵn có** (0 chi phí): FastAPI + SSE + 1 HTML, read-only + STOP; bỏ phương án máy nhà/UPS/4G; cập nhật hạ tầng, chi phí, YAML (`infra`, `ui`) |
 | 2.4 | 25/11/2026 | Thay **testnet** bằng **Demo Trading** (demo.binance.com): API key demo riêng, endpoint `demo-api`/`demo-fapi`; thêm giải thích 3 loại key (trade/read-only/demo) và giới hạn của demo |
+| 2.5 | 25/11/2026 | Phase 1 B0: thêm yêu cầu **Spot pair** vào universe; ghi nhận 4 mã refs không có Spot, 104 symbol tradable, 0 ứng viên snapshot, backtest không đạt; dừng trước Phase 2 để quyết định venue/strategy |
 
 ---
 

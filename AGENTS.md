@@ -4,14 +4,16 @@
 
 ```powershell
 python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
-python -m compileall -q src scripts
+python -m compileall -q src scripts backtest
 python scripts\check_connection.py
+python -m backtest.data        # cache 6 tháng (chỉ lần đầu)
+python -m backtest.run_phase1  # backtest + stress + P1 tests
 ```
 
-- Python 3.12; dependency chỉ `httpx`, `python-dotenv`, `PyYAML`. Không thêm lib nếu không cần.
-- **Không có pytest/lint/typecheck.** `check_connection.py` là verification duy nhất hiện tại.
+- Python 3.12; dependency `httpx`, `python-dotenv`, `PyYAML`, `pandas`, `numpy`, `pyarrow`.
+- **Không có pytest/lint/typecheck.** `check_connection.py` + `backtest.run_phase1` là verification.
 - Chạy live mặc định; demo: `$env:BINANCE_USE_DEMO='true'; python scripts\check_connection.py`.
-- Phase 0 **không tạo `tests/`**, không tạo `ui/`, executor, screener.
+- Phase 0 **không tạo `tests/`/`ui/`**; Phase 1 chỉ tạo `backtest/` (không tạo src runtime, ui).
 
 ## 2. Cấu trúc thật
 
@@ -21,10 +23,11 @@ python scripts\check_connection.py
 - `scripts/check_connection.py` — in cấu hình + public/private + warnings/errors; exit 1 nếu lỗi.
 - `config/settings.yaml` — tham số chiến lược $500/1x/3 coin. `.env` chỉ override 7 biến trong `_ENV_OVERRIDES`; key/flag an toàn đọc trực tiếp bằng `env()`/`env_bool()`.
 - `src/{ingest,allocator,risk,executor,reconciler,watchdog,report}/` là placeholder rỗng — không viết code vào đó khi chưa tới phase.
+- `backtest/` — Phase 1: `data.py` (ingest public), `strategy.py` (feature/screener/sim), `run_phase1.py` (report + P1 tests). Cache `data/backtest/`, report `reports/phase1/` (gitignored).
 
 ## 3. Quy tắc phase (bắt buộc)
 
-`docs/task-trien-khai-funding-rate.md` §0.3 cấm tạo file/thư mục phase chưa tới. Phase 0 chỉ được chạm: `.env`, `config/`, `src/config.py`, `src/binance/{client,checks}.py`, `scripts/check_connection.py`.
+`docs/task-trien-khai-funding-rate.md` §0.3 cấm tạo file/thư mục phase chưa tới. Phase 0 chỉ được chạm: `.env`, `config/`, `src/config.py`, `src/binance/{client,checks}.py`, `scripts/check_connection.py`. Phase 1 chỉ `backtest/` (+ `requirements.txt`, docs). **Phase 1 đã fail → không tạo `ui/`, executor, screener** cho tới khi có quyết định mới.
 
 ## 4. An toàn tiền & key
 
@@ -71,6 +74,7 @@ python scripts\check_connection.py
 - `GET /sapi/v1/account/apiRestrictions` trả `enableWithdrawals`, `enableFutures`, `enableSpotAndMarginTrading`, `ipRestrict`.
 - Endpoint quản lý IP restriction không dùng được cho tài khoản thường (HTTP 500 `100001002`); thêm IP bằng UI.
 - Spot BNB fee thực tế 0,075% (commission asset BNB); futures `feeBurn=true`.
+- **Universe delta-neutral phải là giao Spot USDT + Futures perp.** 4 mã tham chiếu Phase 1 (EVAA/AVAAI/PIEVERSE/PHAROS) đều không có Spot → không hedge được. Screen 283 symbol mở rộng hiện tại = 0 ứng viên 20–60% APR; Phase 1 không đạt, dừng trước Phase 2.
 
 ## 8. Hạ tầng VPS (dùng chung — cẩn thận)
 

@@ -1,13 +1,13 @@
 # TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
 
 **Mã task:** TASK-FR-001  
-**Phiên bản:** 1.4  
+**Phiên bản:** 1.5  
 **Ngày tạo:** 24/11/2026  
-**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.4**  
+**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.5**  
 **Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
 **Hạ tầng:** **VPS sẵn có**, chạy 24/7, $0; dashboard realtime theo §7.4  
 **Người thực hiện:** ____________________  
-**Trạng thái tổng:** ✅ Phase 0 đạt (có ngoại lệ P0-T07/P0-T09)
+**Trạng thái tổng:** ❌ Phase 1 không đạt — dừng trước Phase 2
 
 ---
 
@@ -51,7 +51,7 @@
 | Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
 |---|---|---|---|---|---|---|
 | 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ✅ | | | 11✅/1🟡/1⏭️; VPS live OK |
-| 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ⬜ | | | |
+| 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ❌ | | | 9/12; Net APR −0,15%; deployment 0,55%; 4 mã refs không có Spot |
 | 2 | B1a — Ingest + Feature + Screener + UI read-only | 4–6 ngày | ⬜ | | | |
 | 3 | B1b — Executor + Reconciler + Watchdog + UI STOP | 6–8 ngày | ⬜ | | | |
 | 4 | B1c — Demo Trading + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
@@ -202,61 +202,63 @@ funding-bot/
 
 ### 1.1 Các bước thực hiện
 
-- [ ] **1.1.1** Ingest 6–12 tháng dữ liệu: `fundingRate`, `premiumIndexKlines`, `klines`, `ticker/24hr`, `exchangeInfo`, `openInterestHist`, `depth`.
-- [ ] **1.1.2** Chuẩn hóa: timestamp UTC, interval 1h/2h/4h/8h, tách **baseline 10,95%/năm** và **excess**.
-- [ ] **1.1.3** Implement đúng bộ lọc §5.2: forward APR 20–60%, excess ≥15%, pos ≥0,85, zero ≤0,10, CV ≤2, decay 7d/14d ≥0,6, net ≥20%, slippage ≤0,2%/side, volume ≥$5M.
-- [ ] **1.1.4** Implement score §5.4: `net_APR × min(1,1/CV) × min(1, volume/$20M)`.
-- [ ] **1.1.5** Mô phỏng: 3 coin, $78/leg, 1x, spot $235 + margin $235 + buffer $30; fee 0,24% + slippage 0,11% (c=0,35%).
-- [ ] **1.1.6** Exit theo §10.3 (flip, decay, OI, basis, giá, venue, DD) + rebalance hàng tuần.
-- [ ] **1.1.7** Xuất báo cáo: phân phối PnL tháng, DD, hit rate, **deployment rate** (% thời gian có vốn trong lệnh), turnover, fee drag, break-even days.
-- [ ] **1.1.8** Chạy stress: basis shock 2% và 5%; funding giảm 50%; slippage ×2.
-- [ ] **1.1.9** So sánh với snapshot thực tế: bộ lọc hôm nay ra bao nhiêu ứng viên? (Tham chiếu báo cáo: 4 mã pass — EVAA, AVAAI, PIEVERSE, PHAROS.)
+- [x] **1.1.1** Ingest 6–12 tháng dữ liệu: `fundingRate`, `premiumIndexKlines`, `klines`, `ticker/24hr`, `exchangeInfo`, `openInterestHist`, `depth`. *(104 symbol, 180 ngày; giá/basis 4h, funding native; OI 30 ngày + depth snapshot)*
+- [x] **1.1.2** Chuẩn hóa: timestamp UTC, interval 1h/2h/4h/8h, tách **baseline 10,95%/năm** và **excess**. *(APR = sum funding/window × 365; invariant theo interval)*
+- [x] **1.1.3** Implement đúng bộ lọc §5.2: forward APR 20–60%, excess ≥15%, pos ≥0,85, zero ≤0,10, CV ≤2, decay 7d/14d ≥0,6, net ≥20%, slippage ≤0,2%/side, volume ≥$5M.
+- [x] **1.1.4** Implement score §5.4: `net_APR × min(1,1/CV) × min(1, volume/$20M)`.
+- [x] **1.1.5** Mô phỏng: 3 coin, $78/leg, 1x, spot $235 + margin $235 + buffer $30; fee 0,24% + slippage 0,11% (c=0,35%).
+- [x] **1.1.6** Exit theo §10.3 (flip, decay, OI, basis, giá, venue, DD) + entry khi slot trống, cooldown 7 ngày.
+- [x] **1.1.7** Xuất báo cáo: phân phối PnL tháng, DD, hit rate, **deployment rate**, turnover, fee drag, break-even days. `reports/phase1/`.
+- [x] **1.1.8** Chạy stress: basis shock 2% và 5%; funding giảm 50%; slippage ×2.
+- [x] **1.1.9** So sánh snapshot 24/11: **0 mã pass**; 4 mã tham chiếu EVAA/AVAAI/PIEVERSE/PHAROS **không có Spot** → không hedge được.
 
 ### 1.2 Kết quả cần đạt
 
-- [ ] Net APR **≥ 9% trên vốn** sau chiết khấu quy mô nhỏ.
-- [ ] **≥ 70% tháng dương**; không có tháng nào < −3% (ngoài tail shock).
-- [ ] DD stress **≤ 4%** vốn.
-- [ ] Deployment rate ≥ 50% thời gian (nếu thấp hơn, ghi rõ và điều chỉnh kỳ vọng lợi nhuận).
-- [ ] Bộ lọc trả về **≥ 2 ứng viên** trong ≥ 50% số ngày; nếu không, ghi nhận "thị trường nghèo funding".
-- [ ] Có báo cáo tái lập được bằng 1 lệnh, cùng seed/dữ liệu.
+- [ ] Net APR **≥ 9% trên vốn** sau chiết khấu quy mô nhỏ. *(thực tế **−0,15%**)*
+- [ ] **≥ 70% tháng dương**; không có tháng nào < −3% (ngoài tail shock). *(0% tháng dương)*
+- [x] DD stress **≤ 4%** vốn. *(basis 2%: −0,39%; 5%: −0,85%)*
+- [ ] Deployment rate ≥ 50% thời gian. *(thực tế **0,55%**)*
+- [ ] Bộ lọc trả về **≥ 2 ứng viên** trong ≥ 50% số ngày. *(0 ngày; snapshot 24/11 = 0)*
+- [x] Có báo cáo tái lập được bằng 1 lệnh, cùng seed/dữ liệu. *(`python -m backtest.run_phase1`)*
 
 ### 1.3 Checklist test
 
 | ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
 |---|---|---|---|---|---|
-| P1-T01 | Không lookahead | Shift tín hiệu 1 kỳ; so sánh | Kết quả không đổi bất thường | ⬜ | |
-| P1-T02 | Chuẩn hóa interval | So 4h/8h/1h cùng symbol | APR năm hóa khớp ±1% | ⬜ | |
-| P1-T03 | Baseline/excess | Tính lại 1 symbol tay | Baseline ~10,95%; excess khớp | ⬜ | |
-| P1-T04 | Phí & slippage | So c với 0,35% | Drag 9,13pp APR | ⬜ | |
-| P1-T05 | Min notional & rounding | Mô phỏng $78/leg | Không lệnh nào < min | ⬜ | |
-| P1-T06 | Survivorship/delist | Thêm symbol đã delist | Không crash, xử lý đúng | ⬜ | |
-| P1-T07 | Missing data | Cắt 10% dữ liệu | Không lỗi silent, có cảnh báo | ⬜ | |
-| P1-T08 | Timezone | So timestamp UTC | Khớp fundingTime | ⬜ | |
-| P1-T09 | Tái lập snapshot | Chạy filter ngày 24/11 | Ra 4 mã pass như báo cáo | ⬜ | |
-| P1-T10 | Stress basis 2%/5% | Chạy 2 kịch bản | DD ≤4% / ghi nhận tail | ⬜ | |
-| P1-T11 | Funding giảm 50% | Chạy lại | Net APR vẫn >0 | ⬜ | |
-| P1-T12 | Slippage ×2 | Chạy lại | Net APR >0, ghi rõ biên | ⬜ | |
+| P1-T01 | Không lookahead | Shift tín hiệu 1 kỳ; so sánh | Kết quả không đổi bất thường | ✅ | Full vs cắt dữ liệu tại 11/09: `n=103`, max APR diff `0.00e+00`, `pass_all` giống nhau |
+| P1-T02 | Chuẩn hóa interval | So 4h/8h/1h cùng symbol | APR năm hóa khớp ±1% | ✅ | ERAUSDT: native −147,81%; 1h/2h/4h/8h max diff **0,0000pp** |
+| P1-T03 | Baseline/excess | Tính lại 1 symbol tay | Baseline ~10,95%; excess khớp | ✅ | `0,01%/8h × 3 × 365 = 10,95%` |
+| P1-T04 | Phí & slippage | So c với 0,35% | Drag 9,13pp APR | ✅ | `0,35% × 365/14 = 9,125pp` |
+| P1-T05 | Min notional & rounding | Mô phỏng $78/leg | Không lệnh nào < min | ✅ | 5 candidate rows; `min_notional_fail=0` |
+| P1-T06 | Survivorship/delist | Thêm symbol đã delist | Không crash, xử lý đúng | ✅ | Cắt 牛来USDT @ 26/08; không crash, episodes=0 |
+| P1-T07 | Missing data | Cắt 10% dữ liệu | Không lỗi silent, có cảnh báo | ✅ | Drop 10% funding: features=7943, `data_ok_false=5539` (phát hiện thiếu) |
+| P1-T08 | Timezone | So timestamp UTC | Khớp fundingTime | ✅ | `funding.dt.tz = UTC` |
+| P1-T09 | Tái lập snapshot | Chạy filter ngày 24/11 | Ra 4 mã pass như báo cáo | ❌ | 0 mã pass; EVAA/AVAAI/PIEVERSE/PHAROS đều **không có Spot** |
+| P1-T10 | Stress basis 2%/5% | Chạy 2 kịch bản | DD ≤4% / ghi nhận tail | ✅ | DD 2% = −0,39%; 5% = −0,85% |
+| P1-T11 | Funding giảm 50% | Chạy lại | Net APR vẫn >0 | ❌ | APR = −0,17% |
+| P1-T12 | Slippage ×2 | Chạy lại | Net APR >0, ghi rõ biên | ❌ | APR = −0,19% |
 
 ### 1.4 Kết quả test (biên bản)
 
 | Hạng mục | Giá trị |
 |---|---|
-| Ngày chạy | |
-| Người chạy | |
-| Pass / Fail | __ / 12 |
-| Net APR / tháng | |
-| Deployment rate | |
-| DD stress | |
-| Bằng chứng (report, commit) | |
-| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ⬜ Dừng |
+| Ngày chạy | 25/11/2026 |
+| Người chạy | OpenCode agent (user review) |
+| Pass / Fail | 9 ✅ / 3 ❌ (tổng 12) |
+| Net APR / tháng | **−0,15% APR**; 0% tháng dương |
+| Deployment rate | **0,55%**; 1 episode |
+| DD stress | −0,39% (basis 2%) / −0,85% (basis 5%) |
+| Bằng chứng (report, commit) | `reports/phase1/report.md`, `summary.json`, `daily_equity.csv`, `episodes.csv`; commit Phase 1 |
+| Quyết định | ⬜ Đạt / ⬜ Chạy lại / ✅ **Dừng — không chuyển Phase 2** |
 
 ### 1.5 Ghi chú & rủi ro
 
 - **Không tối ưu tham số để đẹp backtest.** Nếu phải nới cap 60% hoặc hạ net 20% mới có lãi, ghi rõ đó là quyết định rủi ro.
 - **Backtest là trần lý thuyết** (§6.3): survivorship, một vài regime, không mô hình liquidation/ADL/delist.
 - **Deployment rate thấp là kết quả hợp lệ**, không phải lỗi. Thị trường funding hiện tại median ~4,2%/năm → đứng ngoài là bình thường.
-- Nếu Phase 1 fail: **không** chuyển sang xây automation. Quay lại bộ lọc/cấu hình.
+- **Phát hiện cấu trúc (quan trọng):** 4 mã tham chiếu EVAA/AVAAI/PIEVERSE/PHAROS đều **không có cặp Spot USDT** → không thể hedge delta-neutral. Universe tradable (Spot + Futures, fut vol ≥$5M) chỉ 104 symbol; screen 283 symbol mở rộng hiện tại cho **0 ứng viên** đạt 20–60% APR; backtest 180 ngày chỉ có **1 episode** (牛来USDT, 1 ngày).
+- **Không hạ chuẩn để có kết quả đẹp.** Nếu muốn tiếp tục: (a) thêm venue Spot khác cho coin perp-only (cross-exchange) hoặc margin/borrow short spot; (b) chấp nhận universe hẹp và chờ regime funding; (c) đổi sang perp-only — **không khuyến nghị** vì mất delta-neutral.
+- **Nếu Phase 1 fail: không chuyển sang xây automation.** Quay lại bộ lọc/cấu hình/universe. **(Đã fail → dừng trước Phase 2.)**
 
 ---
 
@@ -817,6 +819,7 @@ ui_stop_requires_confirm: true
 | 1.2 | 25/11/2026 | Chuyển Testnet → **Demo Trading**; thêm §0.1a (3 loại key); triển khai VPS `/opt/funding-bot` (user funding, systemd, backup); ghi kết quả P0 5✅/2❌/1🟡/1⬜/4⏭️; thêm guard read-only + ngoại lệ firewall VPS dùng chung |
 | 1.3 | 25/11/2026 | Live key hoạt động (spot 235.97/futures 265.85, withdraw=False, read-only 401); Telegram 1,44s; dead-man 200; Tailscale 59ms; BNB fee 0,075%; sửa `.env` UTF-8 không BOM; kết quả **11✅/1🟡/1⏭️**; blocker whitelist IP VPS `43.240.117.54` |
 | 1.4 | 25/11/2026 | Whitelist IP VPS xong: `check_connection.py` trên VPS OK, read-only đọc account/position OK; **Phase 0 đạt** (ngoại lệ P0-T07 SMS/email, P0-T09 firewall VPS dùng chung) |
+| 1.5 | 25/11/2026 | Phase 1 B0: ingest 104 symbol/180 ngày, backtest 9✅/3❌; Net APR −0,15%, deployment 0,55%, 1 episode; **không đạt** vì universe Spot+Futures thiếu ứng viên; 4 mã refs không có Spot → dừng trước Phase 2 |
 
 ---
 
