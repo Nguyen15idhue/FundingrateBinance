@@ -147,6 +147,69 @@ Vì vậy cross-venue **chưa đủ hấp dẫn ở $500** so với công vận 
 - Spot: **không có**.
 - Vậy con đường khả thi còn lại là **cross-exchange perp–perp** (Bybit/Bitget/OKX/Gate/MEXC), với các rủi ro đã phân tích.
 
+## 9. Lợi nhuận thực tế & cách tối đa hóa (risk-adjusted)
+
+### 9.1 Ước lượng lợi nhuận
+
+Công thức 30 ngày, cost 0,4%, 3 coin, $500:
+
+```text
+net_APR_vốn ≈ 0,47 × (spread − 4,9pp)
+```
+
+| Kịch bản | Spread | Net APR vốn | $/tháng |
+|---|---:|---:|---:|
+| Binance–Bybit, mean 180 ngày | 8,5–13,1pp | 1,7–3,8% | $0,7–1,6 |
+| Binance–Bybit, 30 ngày gần nhất | 19,7–29,4pp | 7,0–11,5% | $2,9–4,8 |
+| EVAA–Bitget, 30 ngày | 42,2pp | ~17,5% | ~$7,3 |
+| INX–Gate, 30 ngày | 62,6pp | ~27,1% | ~$11,3 |
+| JCT–OKX, 30 ngày (lịch sử ngắn) | 50,7pp | ~21,5% | ~$9,0 |
+
+**Đọc đúng:** 30 ngày gần nhất là regime tốt; 180 ngày Binance–Bybit chỉ 8,5–13,1pp. Không được lấy spread 42–63pp làm giả định bền.
+
+### 9.2 Screen mở rộng — đòn bẩy lớn nhất
+
+Screen 16 mã perp-only funding cao nhất của Binance trên 5 sàn (snapshot 14 ngày):
+
+| Symbol | Binance | Sàn tốt nhất | Spread | Hướng |
+|---|---:|---|---:|---|
+| EVAA | 60,2% | Bitget 11,1% | **49,1pp** | short Binance / long Bitget |
+| INX | 23,7% | Gate 71,3% | **47,6pp** | short Gate / long Binance |
+| AVAAI | 38,1% | Bybit 11,8% | 26,3pp | short Binance / long Bybit |
+| TA | 36,8% | Bybit 11,0% | 25,8pp | short Binance / long Bybit |
+| PIEVERSE | 33,2% | Gate 9,4% | 23,8pp | short Binance / long Gate |
+| JCT | 34,2% | OKX 10,6% | 23,6pp | short Binance / long OKX |
+| PHAROS | 34,7% | Bybit 11,3% | 23,4pp | short Binance / long Bybit |
+| XMR | 16,5% | Bitget 35,1% | 18,6pp | short Bitget / long Binance |
+
+30 ngày gần nhất xác nhận một phần: EVAA–Bitget 42,2pp; INX–Gate 62,6pp; AVAAI–Bybit 29,4pp; TA–Bybit 26,5pp. Nhưng INX–Gate/JCT–OKX có lịch sử ngắn, thanh khoản và venue risk cao.
+
+### 9.3 Các đòn tăng lợi nhuận, xếp theo hiệu quả/rủi ro
+
+1. **Screen toàn universe + nhiều sàn** (lớn nhất): thay vì cố định 4 mã, mỗi ngày chọn top 3 spread 14d/30d sau chi phí. Đây là cách tìm 20–60pp thay vì 8–13pp.
+2. **Ngưỡng entry động + giữ 30–60 ngày**: chỉ vào khi spread ≥25–30pp (30d) hoặc ≥15pp (60d); thoát khi spread <10pp hoặc đảo dấu. Hold dài amortize phí; hold 14 ngày dễ lỗ vì phí.
+3. **Giảm phí**: maker/limit thay taker, VIP tier, BNB/token discount, rebate. Mỗi 0,1% cost giảm thêm ~1,2pp APR trên vốn (hold 30d).
+4. **Chọn venue theo risk-adjusted spread**: Binance+Bybit Tier-1; Bitget/Gate/MEXC chỉ khi spread cao hơn đủ bù rủi ro; giới hạn ≤20% vốn/venue nhỏ.
+5. **Basis-aware execution**: ưu tiên long sàn đang rẻ hơn (basis âm), tránh entry khi basis >0,2–0,3% bất lợi; exit nếu basis z >3σ.
+6. **Tự động hóa 2 leg**: `clientOrderId`, retry/rollback, đồng bộ giờ; giảm slippage và leg risk — nhưng chỉ sau Phase 1b pass.
+7. **Đòn bẩy 2x**: chỉ sau gate 60–90 ngày; tăng return ~2x nhưng DD/liquidation cũng ~2x. Ở $500 **không nên**.
+8. **Tối ưu chuyển tiền**: giữ collateral cả 2 sàn, gom transfer, chọn mạng phí thấp; tránh rút/nạp nhiều lần.
+
+### 9.4 Cấu hình đề xuất nếu làm Phase 1b
+
+- 3 coin, 1x, Binance + Bybit là chính; thêm 1 venue nhỏ tối đa 20% vốn.
+- Entry: spread 30d ≥25pp (hoặc 14d ≥30pp); hold 30 ngày; exit <10pp hoặc basis z >3.
+- Buffer 15–20% (không phải 6%) vì 2 sàn/2 margin.
+- Kỳ vọng risk-adjusted: **5–10%/năm** ở regime bình thường, **10–18%/năm** trong cửa sổ tốt; không cam kết.
+- Gate: 6–12 tháng cross-venue backtest, net APR ≥9% vốn, DD ≤4%, ≥70% tháng dương, deployment ≥50%.
+
+### 9.5 Điều không nên làm
+
+- Không tăng leverage để "tối đa" — biến chiến lược funding thành cược basis/liquidation.
+- Không chase spread snapshot 50–60pp nếu chưa kiểm tra 30/90/180 ngày.
+- Không dồn vốn vào Bitget/Gate/MEXC chỉ vì spread cao.
+- Không hạ ngưỡng APR/net để có trades; sẽ lặp lại lỗi Phase 1.
+
 ---
 
-*Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 90d Binance–Bitget. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*
+*Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 30d cho các cặp mở rộng. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*
