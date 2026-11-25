@@ -116,6 +116,37 @@ Với differential trung bình 12–13pp (AVAAI/PHAROS), hold 30 ngày, cost 0,4
 
 Vì vậy cross-venue **chưa đủ hấp dẫn ở $500** so với công vận hành; đáng cân nhắc lại ở $2.000+ hoặc nếu tìm được cặp venue/coin có differential bền >25pp.
 
+## 8. Cùng Binance có làm 2 lệnh perp ngược nhau được không?
+
+**Được về mặt kỹ thuật, nhưng không tạo funding arbitrage.**
+
+| Cách | Có 2 funding rate khác nhau? | Kết quả |
+|---|---|---|
+| Long + short **cùng symbol** ở **hedge mode** | Không — cùng một rate | Funding nhận/pay bù trừ, còn phí + spread → lỗ |
+| Long + short cùng symbol ở **one-way mode** | Không | Lệnh sau giảm/đảo vị thế, không giữ được 2 chiều |
+| 2 tài khoản/sub-account cùng sàn | Không — cùng rate | Net funding = 0, thêm phí |
+| **USDT-M perp vs COIN-M perp** | Có — 2 contract khác nhau | Khả thi lý thuyết, nhưng COIN-M chỉ 20 mã (BTC/ETH...), size $100, collateral BTC, inverse; **không có EVAA/AVAAI/PIEVERSE/PHAROS** |
+| Perp vs quarterly delivery | Không — quarterly không funding | Là basis trade, không phải funding arb |
+| Spot margin short + perp long | Có (funding + borrow) | Chỉ coin có Spot; không dùng được cho perp-only |
+| **Cross-exchange perp–perp** | Có — rate khác theo sàn | Khả thi; kinh tế biên (xem trên) |
+
+### Hedge mode trên Binance
+
+- Bật `dualSidePosition=true`; đặt lệnh với `positionSide=LONG` hoặc `SHORT`.
+- Có thể giữ cả hai cùng lúc, nhưng:
+  - Funding rate áp dụng như nhau cho cả hai phía.
+  - Long trả short nhận (khi rate dương); nếu bạn là cả hai, khoản này **tự bù trừ**.
+  - Entry price khác nhau chỉ tạo lãi/lỗ spread; phí 2 lần vào + 2 lần ra làm kết quả âm.
+- Hedge mode hữu ích để **hedge một vị thế khác** hoặc chạy 2 chiến lược độc lập, **không** để ăn funding.
+- Bot hiện tại dùng **one-way mode** (`dualSidePosition=false`) theo kế hoạch; không nên đổi sang hedge mode cho mục tiêu này.
+
+### Kết luận cho 4 mã perp-only
+
+- Cùng contract cùng sàn: **không có edge**.
+- COIN-M: **không có** 4 mã này.
+- Spot: **không có**.
+- Vậy con đường khả thi còn lại là **cross-exchange perp–perp** (Bybit/Bitget/OKX/Gate/MEXC), với các rủi ro đã phân tích.
+
 ---
 
 *Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 90d Binance–Bitget. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*
