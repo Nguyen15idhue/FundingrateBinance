@@ -283,6 +283,75 @@ Dùng khi coin **không có Spot** (PHAROS, XMR) hoặc khi funding sàn kia cao
 6. **Idle yield**: giữ buffer trong flexible earn, nhưng phải rút được ngay khi cần margin.
 7. **Không leverage, không chase spread snapshot, không hạ chuẩn.**
 
+## 11. Rotation: chỉ vào coin FR cao, hết thì nhảy sang coin khác
+
+### 11.1 Khi nào rotation có lợi?
+
+Rotation là **lớp phân bổ vốn** trên cùng edge funding, không tạo ra edge mới.
+
+- **Có lợi** khi: có nhiều coin FR cao > ngưỡng; FR decay/flip thường xuyên; hệ thống thoát đúng lúc và tìm được coin mới.
+- **Không có lợi** khi: universe ít candidate; FR cao đã ở cuối chu kỳ; xoay quá nhanh làm phí ăn hết funding; basis/venue risk tăng.
+
+### 11.2 Chi phí rotation quyết định tất cả
+
+Mỗi lần xoay = 1 round-trip (vào + ra) trên notional; cost 0,35–0,50%.
+
+```text
+drag_APR_notional = cost_roundtrip × 365 / holding_days
+net_APR_vốn       ≈ 0,47 × (FR − drag)
+```
+
+| Hold trung bình | Drag @ cost 0,4% | FR tối thiểu để net 9% vốn |
+|---|---:|---:|
+| 7 ngày | 20,9pp | ~40pp |
+| 14 ngày | 10,4pp | ~29,6pp |
+| 30 ngày | 4,9pp | ~24,0pp |
+| 60 ngày | 2,4pp | ~21,6pp |
+
+**Kết luận:** không nên xoay nhanh hơn 14 ngày; lý tưởng giữ 30–60 ngày hoặc chỉ thoát khi FR thật sự decay/flip. Xoay 7 ngày cần FR >40% mới đáng.
+
+### 11.3 Binance spot+perp rotation: không giải quyết được bottleneck
+
+Phase 1 cho thấy universe Binance spot+perp (104 symbol) gần như **không có candidate**:
+- Snapshot 24/11: 0 mã pass.
+- 180 ngày: 1 episode.
+- 4 mã FR cao (EVAA/AVAAI/PIEVERSE/PHAROS) **không có Spot Binance**.
+
+→ Rotation trong universe này **không tăng lợi nhuận đáng kể**, vì không có gì để xoay sang. Vấn đề là **nguồn candidate**, không phải logic rotation.
+
+### 11.4 Cross-venue spot+perp rotation: khả thi hơn
+
+Nếu Spot nằm ở sàn khác, rotation có nguyên liệu:
+
+| Coin | Spot venue | FR Binance 30d | Hold 30d, net ước tính |
+|---|---|---:|---:|
+| EVAA | Bitget/Gate/MEXC | 53,2% | ~22% |
+| AVAAI | Gate/MEXC | 40,8% | ~16% |
+| TA | Bybit/Gate/MEXC | 38,1% | ~15% |
+| PIEVERSE | Bybit/Gate/MEXC | 29,4% | ~11% |
+| INX | Gate/MEXC | 25,7% | ~9% |
+
+Rotation có thể giữ 3 slot được lấp khi coin này decay và coin khác xuất hiện; deployment tăng từ ~1% (Phase 1) lên 50–80% trong regime tốt.
+
+**Nhưng:** đây là số 30 ngày gần nhất; 180 ngày Binance–Bybit thấp hơn nhiều. Cần backtest 6–12 tháng.
+
+### 11.5 Thiết kế rotation đúng
+
+1. **Universe:** Binance perp + Spot trên Bybit/Gate/Bitget/MEXC; chỉ coin có spot depth đủ cho $78.
+2. **Signal:** FR 7d/14d, forward = min(7d,14d), pos ratio, CV, decay, predicted, net sau phí, basis.
+3. **Entry/exit hysteresis:** vào khi net ≥30% (hoặc FR ≥30%); thoát khi predicted <0,5×trailing, FR âm 2 kỳ, hoặc net <10–15%. **Không xoay chỉ vì có coin khác cao hơn** nếu coin hiện tại vẫn tốt.
+4. **Min hold 14–30 ngày**, max 1–2 rotation/tuần, cooldown 7 ngày sau exit.
+5. **So sánh 2 cấu trúc mỗi coin:** spot+perp (full funding) vs perp–perp (spread); chọn net/risk cao hơn.
+6. **Backtest walk-forward** 6–12 tháng, gồm phí/slippage/basis/transfer; so sánh static vs rotation.
+7. **Gate:** net APR ≥9% vốn, DD ≤4%, ≥70% tháng dương, deployment ≥50%, turnover cost chấp nhận.
+
+### 11.6 Kết luận rotation
+
+- **Binance-only spot+perp:** rotation **không** tăng đáng kể vì thiếu candidate.
+- **Cross-venue spot+perp:** rotation **có thể** tăng lợi nhuận (deployment + chọn coin mới), nhưng chỉ khi giữ đủ lâu và có candidate bền.
+- **Không xoay nhanh:** 7 ngày cần FR >40%; 30 ngày cần >24%; 60 ngày cần >21,6%.
+- **Không chạy rotation trước Phase 1b:** cần backtest cross-venue để chứng minh net APR và DD.
+
 ---
 
 *Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 30d cho các cặp mở rộng. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*
