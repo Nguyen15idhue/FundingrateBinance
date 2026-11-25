@@ -7,6 +7,14 @@ python -m backtest.data        # ingest/cache 6 tháng (chỉ cần lần đầu
 python -m backtest.run_phase1  # backtest + stress + P1-T01..T12
 ```
 
+Chạy profile dài hơn (365 ngày), không ghi đè bản 180 ngày:
+
+```powershell
+$env:BT_DAYS='365'; $env:BT_DATA_DIR='data/backtest_365'; $env:BT_REPORT_DIR='reports/phase1_365'
+python -m backtest.data
+python -m backtest.run_phase1
+```
+
 - Cache: `data/backtest/*.parquet` (gitignored).
 - Report: `reports/phase1/{summary.json,report.md,daily_equity.csv,episodes.csv,snapshot.csv}`.
 - Không dùng API key; chỉ public Binance.
@@ -20,16 +28,17 @@ python -m backtest.run_phase1  # backtest + stress + P1-T01..T12
 
 ## Kết quả tóm tắt (25/11/2026)
 
-| Chỉ số | Giá trị |
-|---|---:|
-| Net APR trên vốn | **−0,15%** |
-| Return 180 ngày | −0,07% |
-| Deployment rate | 0,55% |
-| Episodes | 1 |
-| Hit rate | 0% |
-| Max DD | −0,07% |
-| DD stress basis 5% | −0,85% |
-| P1 tests | **9/12** |
+| Chỉ số | 180 ngày | 365 ngày |
+|---|---:|---:|
+| Net APR trên vốn | **−0,15%** | **−0,11%** |
+| Return | −0,07% | −0,11% |
+| Deployment rate | 0,55% | 0,55% |
+| Episodes | 1 | 2 |
+| Hit rate | 0% | 0% |
+| Max DD | −0,07% | −0,11% |
+| P1 tests | **9/12** | **9/12** |
+
+Chi tiết 365d: `docs/phase1-long-backtest-365d.md`.
 
 **Kết luận:** Phase 1 **không đạt**. Không chuyển Phase 2 khi chưa xử lý mâu thuẫn universe (spot pair) và regime funding.
 

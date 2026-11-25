@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 END = datetime(2026, 11, 24, tzinfo=timezone.utc)
-DAYS = 180
+DAYS = int(os.getenv("BT_DAYS", "180"))
+DATA_DIR = Path(os.getenv("BT_DATA_DIR", "data/backtest"))
+REPORT_DIR = Path(os.getenv("BT_REPORT_DIR", "reports/phase1"))
 START = END - timedelta(days=DAYS)
 START_MS = int(START.timestamp() * 1000)
 END_MS = int(END.timestamp() * 1000)

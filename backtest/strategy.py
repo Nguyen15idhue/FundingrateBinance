@@ -12,7 +12,7 @@ import pandas as pd
 
 from backtest import config as cfg
 
-DATA = Path("data/backtest")
+DATA = cfg.DATA_DIR
 EPS = 1e-12
 
 

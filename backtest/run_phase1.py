@@ -11,8 +11,8 @@ import pandas as pd
 from backtest import config as cfg
 from backtest import data, strategy
 
-OUT = Path("reports/phase1")
-DATA = Path("data/backtest")
+OUT = cfg.REPORT_DIR
+DATA = cfg.DATA_DIR
 
 
 def _load() -> tuple[dict, pd.DataFrame, dict, dict, dict]:

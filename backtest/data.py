@@ -6,6 +6,7 @@ Chỉ đọc public API, không dùng key. Cache Parquet trong data/backtest/.
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -15,7 +16,8 @@ import pandas as pd
 
 from backtest import config as cfg
 
-OUT = Path("data/backtest")
+OUT = cfg.DATA_DIR
+CACHE = OUT / "cache"
 FAPI = "https://fapi.binance.com"
 SAPI = "https://api.binance.com"
 
@@ -213,6 +215,43 @@ def _kline_frame(symbol: str, rows: list[list], market: str) -> pd.DataFrame:
     return df[["symbol", "market", "open_time", "dt", "open", "high", "low", "close", "volume", "quote_volume", "taker_buy_quote"]]
 
 
+def _cache_dir(symbol: str) -> Path:
+    return CACHE / symbol.replace("/", "_")
+
+
+def _save_symbol(symbol: str, meta: dict, funding: pd.DataFrame, klines: pd.DataFrame,
+                 premium: pd.DataFrame | None, spot: pd.DataFrame, oi: pd.DataFrame) -> None:
+    d = _cache_dir(symbol)
+    d.mkdir(parents=True, exist_ok=True)
+    if not funding.empty:
+        funding.to_parquet(d / "funding.parquet", index=False)
+    if not klines.empty:
+        klines.to_parquet(d / "klines.parquet", index=False)
+    if premium is not None and not premium.empty:
+        premium.to_parquet(d / "premium.parquet", index=False)
+    if not spot.empty:
+        spot.to_parquet(d / "spot.parquet", index=False)
+    if not oi.empty:
+        oi.to_parquet(d / "oi.parquet", index=False)
+    (d / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _load_symbol(symbol: str) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
+    d = _cache_dir(symbol)
+    mp = d / "meta.json"
+    if not mp.exists():
+        return None
+
+    def rd(name: str) -> pd.DataFrame:
+        p = d / f"{name}.parquet"
+        return pd.read_parquet(p) if p.exists() else pd.DataFrame()
+
+    return (
+        json.loads(mp.read_text(encoding="utf-8")),
+        rd("funding"), rd("klines"), rd("premium"), rd("spot"), rd("oi"),
+    )
+
+
 def ingest() -> dict:
     OUT.mkdir(parents=True, exist_ok=True)
     client = BinancePublic()
@@ -221,49 +260,82 @@ def ingest() -> dict:
         universe, meta = select_universe(client)
 
         funding_rows, k_rows, p_rows, s_rows, oi_rows = [], [], [], [], []
+        resume = os.getenv("BT_RESUME", "1") != "0"
         for i, u in enumerate(universe, 1):
             sym = u["symbol"]
+            cached = _load_symbol(sym) if resume else None
+            if cached and cached[0].get("_days") == cfg.DAYS:
+                cu, cf, ck, cp, cs, co = cached
+                u.update({k: v for k, v in cu.items() if not k.startswith("_")})
+                if not cf.empty:
+                    funding_rows += cf.to_dict("records")
+                if not ck.empty:
+                    k_rows.append(ck)
+                if not cp.empty:
+                    p_rows.append(cp)
+                if not cs.empty:
+                    s_rows.append(cs)
+                if not co.empty:
+                    oi_rows += co.to_dict("records")
+                warnings.extend(cu.get("_warnings", []))
+                if i % 10 == 0 or i == len(universe):
+                    print(f"cached {i}/{len(universe)} {sym}", flush=True)
+                continue
             try:
                 f = client.funding(sym)
-                for x in f:
-                    funding_rows.append({
-                        "symbol": sym,
-                        "fundingTime": int(x["fundingTime"]),
-                        "fundingRate": float(x["fundingRate"]),
-                    })
-                k_rows.append(_kline_frame(sym, client.klines(FAPI, "/fapi/v1/klines", sym), "futures"))
+                fdf = pd.DataFrame([
+                    {"symbol": sym, "fundingTime": int(x["fundingTime"]), "fundingRate": float(x["fundingRate"])}
+                    for x in f
+                ])
+                funding_rows += fdf.to_dict("records")
+                kdf = _kline_frame(sym, client.klines(FAPI, "/fapi/v1/klines", sym), "futures")
+                k_rows.append(kdf)
                 p = client.klines(FAPI, "/fapi/v1/premiumIndexKlines", sym)
+                pdf = None
                 if p:
-                    pdf = pd.DataFrame(p)
-                    pdf = pdf.iloc[:, :6]
+                    pdf = pd.DataFrame(p).iloc[:, :6]
                     pdf.columns = ["open_time", "open", "high", "low", "close", "ignore"]
                     pdf["symbol"] = sym
                     pdf["open_time"] = pd.to_numeric(pdf["open_time"]).astype("int64")
                     pdf["dt"] = pd.to_datetime(pdf["open_time"], unit="ms", utc=True)
                     for c in ("open", "high", "low", "close"):
                         pdf[c] = pd.to_numeric(pdf[c], errors="coerce")
-                    p_rows.append(pdf[["symbol", "open_time", "dt", "open", "high", "low", "close"]])
-                s_rows.append(_kline_frame(sym, client.klines(SAPI, "/api/v3/klines", sym), "spot"))
+                    pdf = pdf[["symbol", "open_time", "dt", "open", "high", "low", "close"]]
+                    p_rows.append(pdf)
+                sdf = _kline_frame(sym, client.klines(SAPI, "/api/v3/klines", sym), "spot")
+                s_rows.append(sdf)
                 buy_slip, sell_slip = client.depth_slippage(sym, cfg.NOTIONAL_PER_COIN)
                 slip = max(buy_slip, sell_slip)
                 u["slippage_pct"] = round(slip, 4)
                 u["slippage_buy_pct"] = round(buy_slip, 4)
                 u["slippage_sell_pct"] = round(sell_slip, 4)
-                for x in client.oi_hist(sym):
-                    oi_rows.append({
+                odf = pd.DataFrame([
+                    {
                         "symbol": sym,
                         "time": int(x["timestamp"]),
                         "oi": float(x["sumOpenInterest"]),
                         "oi_value": float(x["sumOpenInterestValue"]),
-                    })
-                if not f:
-                    warnings.append(f"{sym}: no funding")
-                if not s_rows[-1].empty and len(s_rows[-1]) < 900:
-                    warnings.append(f"{sym}: spot klines only {len(s_rows[-1])}")
+                    }
+                    for x in client.oi_hist(sym)
+                ])
+                if not odf.empty:
+                    oi_rows += odf.to_dict("records")
+                w = []
+                if fdf.empty:
+                    w.append(f"{sym}: no funding")
+                if not sdf.empty and len(sdf) < 900:
+                    w.append(f"{sym}: spot klines only {len(sdf)}")
+                u["_warnings"] = w
+                u["_days"] = cfg.DAYS
+                warnings += w
+                _save_symbol(sym, u, fdf, kdf, pdf, sdf, odf)
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"{sym}: {exc}")
             if i % 10 == 0 or i == len(universe):
                 print(f"ingest {i}/{len(universe)} {sym} calls={client.calls}", flush=True)
+        for u in universe:
+            u.pop("_warnings", None)
+            u.pop("_days", None)
         pd.DataFrame(universe).to_parquet(OUT / "universe.parquet", index=False)
     finally:
         client.close()

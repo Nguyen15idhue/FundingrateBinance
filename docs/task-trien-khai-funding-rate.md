@@ -1,13 +1,13 @@
 # TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
 
 **Mã task:** TASK-FR-001  
-**Phiên bản:** 1.5  
+**Phiên bản:** 1.6  
 **Ngày tạo:** 24/11/2026  
 **Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.5**  
 **Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
 **Hạ tầng:** **VPS sẵn có**, chạy 24/7, $0; dashboard realtime theo §7.4  
 **Người thực hiện:** ____________________  
-**Trạng thái tổng:** ❌ Phase 1 không đạt — dừng trước Phase 2
+**Trạng thái tổng:** ❌ Phase 1 không đạt (180d & 365d) — dừng trước Phase 2
 
 ---
 
@@ -51,7 +51,7 @@
 | Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
 |---|---|---|---|---|---|---|
 | 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ✅ | | | 11✅/1🟡/1⏭️; VPS live OK |
-| 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ❌ | | | 9/12; Net APR −0,15%; deployment 0,55%; 4 mã refs không có Spot |
+| 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ❌ | | | 180/365d: 9/12; Net APR −0,15/−0,11%; deployment 0,55%; refs không có Spot |
 | 2 | B1a — Ingest + Feature + Screener + UI read-only | 4–6 ngày | ⬜ | | | |
 | 3 | B1b — Executor + Reconciler + Watchdog + UI STOP | 6–8 ngày | ⬜ | | | |
 | 4 | B1c — Demo Trading + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
@@ -258,6 +258,7 @@ funding-bot/
 - **Deployment rate thấp là kết quả hợp lệ**, không phải lỗi. Thị trường funding hiện tại median ~4,2%/năm → đứng ngoài là bình thường.
 - **Phát hiện cấu trúc (quan trọng):** 4 mã tham chiếu EVAA/AVAAI/PIEVERSE/PHAROS đều **không có cặp Spot USDT** → không thể hedge delta-neutral. Universe tradable (Spot + Futures, fut vol ≥$5M) chỉ 104 symbol; screen 283 symbol mở rộng hiện tại cho **0 ứng viên** đạt 20–60% APR; backtest 180 ngày chỉ có **1 episode** (牛来USDT, 1 ngày).
 - **Không hạ chuẩn để có kết quả đẹp.** Nếu muốn tiếp tục: (a) thêm venue Spot khác cho coin perp-only (cross-exchange) hoặc margin/borrow short spot; (b) chấp nhận universe hẹp và chờ regime funding; (c) đổi sang perp-only — **không khuyến nghị** vì mất delta-neutral.
+- **Backtest 365 ngày:** xem `docs/phase1-long-backtest-365d.md` — 101 symbol, 34.325 feature, 2 episode, deployment vẫn **0,55%**, net APR **−0,11%**; kéo dài thời gian **không** giải quyết thiếu Spot.
 - **Phân tích cross-venue:** xem `docs/cross-venue-funding-analysis.md` — perp–perp Binance+Bybit khả thi kỹ thuật (cả 4 mã có Bybit), nhưng differential 180 ngày chỉ 8,5–13,1pp → kinh tế biên; cần Phase 1b trước khi thay đổi chiến lược.
 - **Nếu Phase 1 fail: không chuyển sang xây automation.** Quay lại bộ lọc/cấu hình/universe. **(Đã fail → dừng trước Phase 2.)**
 
@@ -821,6 +822,7 @@ ui_stop_requires_confirm: true
 | 1.3 | 25/11/2026 | Live key hoạt động (spot 235.97/futures 265.85, withdraw=False, read-only 401); Telegram 1,44s; dead-man 200; Tailscale 59ms; BNB fee 0,075%; sửa `.env` UTF-8 không BOM; kết quả **11✅/1🟡/1⏭️**; blocker whitelist IP VPS `43.240.117.54` |
 | 1.4 | 25/11/2026 | Whitelist IP VPS xong: `check_connection.py` trên VPS OK, read-only đọc account/position OK; **Phase 0 đạt** (ngoại lệ P0-T07 SMS/email, P0-T09 firewall VPS dùng chung) |
 | 1.5 | 25/11/2026 | Phase 1 B0: ingest 104 symbol/180 ngày, backtest 9✅/3❌; Net APR −0,15%, deployment 0,55%, 1 episode; **không đạt** vì universe Spot+Futures thiếu ứng viên; 4 mã refs không có Spot → dừng trước Phase 2 |
+| 1.6 | 25/11/2026 | Backtest dài 365 ngày (101 symbol, 34.325 feature): 2 episode, deployment 0,55%, Net APR −0,11%, vẫn 9/12 test; kết luận kéo dài thời gian không giải quyết thiếu Spot |
 
 ---
 

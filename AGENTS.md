@@ -75,6 +75,7 @@ python -m backtest.run_phase1  # backtest + stress + P1 tests
 - Endpoint quản lý IP restriction không dùng được cho tài khoản thường (HTTP 500 `100001002`); thêm IP bằng UI.
 - Spot BNB fee thực tế 0,075% (commission asset BNB); futures `feeBurn=true`.
 - **Universe delta-neutral phải là giao Spot USDT + Futures perp.** 4 mã tham chiếu Phase 1 (EVAA/AVAAI/PIEVERSE/PHAROS) đều không có Spot → không hedge được. Screen 283 symbol mở rộng hiện tại = 0 ứng viên 20–60% APR; Phase 1 không đạt, dừng trước Phase 2.
+- **Backtest 365d không cải thiện:** 2 episode, deployment 0,55%, Net APR −0,11%. Đừng kéo dài thời gian trên universe Binance spot+perp; bottleneck là candidate/Spot, không phải độ dài dữ liệu.
 
 ## 8. Hạ tầng VPS (dùng chung — cẩn thận)
 
