@@ -156,22 +156,27 @@ def run_checks(settings: Settings) -> CheckReport:
         report.errors.append(f"account_spot lỗi: {exc}")
 
     # API permissions
-    try:
-        restrictions = client.api_restrictions()
-        report.private["api_restrictions"] = {
-            "enable_withdrawals": restrictions.get("enableWithdrawals"),
-            "enable_futures": restrictions.get("enableFutures"),
-            "enable_spot": restrictions.get("enableSpotAndMarginTrading"),
-            "ip_restrict": restrictions.get("ipRestrict"),
-        }
-        if restrictions.get("enableWithdrawals"):
-            report.errors.append("API KEY ĐANG BẬT WITHDRAW — phải tắt ngay.")
-        if restrictions.get("enableFutures") is False:
-            report.errors.append("API key chưa bật quyền Futures.")
-    except BinanceAPIError as exc:
-        report.warnings.append(f"Không đọc được apiRestrictions: {exc}")
-    except Exception as exc:  # noqa: BLE001
-        report.warnings.append(f"apiRestrictions lỗi: {exc}")
+    if settings.use_demo:
+        report.warnings.append(
+            "Demo không hỗ trợ apiRestrictions/spot tradeFee — bỏ qua kiểm tra quyền & phí spot."
+        )
+    else:
+        try:
+            restrictions = client.api_restrictions()
+            report.private["api_restrictions"] = {
+                "enable_withdrawals": restrictions.get("enableWithdrawals"),
+                "enable_futures": restrictions.get("enableFutures"),
+                "enable_spot": restrictions.get("enableSpotAndMarginTrading"),
+                "ip_restrict": restrictions.get("ipRestrict"),
+            }
+            if restrictions.get("enableWithdrawals"):
+                report.errors.append("API KEY ĐANG BẬT WITHDRAW — phải tắt ngay.")
+            if restrictions.get("enableFutures") is False:
+                report.errors.append("API key chưa bật quyền Futures.")
+        except BinanceAPIError as exc:
+            report.warnings.append(f"Không đọc được apiRestrictions: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            report.warnings.append(f"apiRestrictions lỗi: {exc}")
 
     # Fees
     try:
@@ -184,8 +189,9 @@ def run_checks(settings: Settings) -> CheckReport:
         report.warnings.append(f"Không đọc được commissionRate: {exc}")
 
     try:
-        fees = client.spot_trade_fee("BTCUSDT")
-        report.private["spot_fee_pct"] = fees
+        if not settings.use_demo:
+            fees = client.spot_trade_fee("BTCUSDT")
+            report.private["spot_fee_pct"] = fees
     except BinanceAPIError as exc:
         report.warnings.append(f"Không đọc được spot tradeFee: {exc}")
 

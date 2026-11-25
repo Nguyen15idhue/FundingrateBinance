@@ -1,13 +1,13 @@
 # TASK — TRIỂN KHAI HỆ THỐNG HARVEST FUNDING RATE
 
 **Mã task:** TASK-FR-001  
-**Phiên bản:** 1.1  
+**Phiên bản:** 1.2  
 **Ngày tạo:** 24/11/2026  
-**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.3**  
+**Kế hoạch gốc:** `docs/ke-hoach-funding-rate.md` — phiên bản **2.4**  
 **Cấu hình chốt:** vốn **$500**, spot $235 / futures $265, perp **1x**, 3 coin, **L3 tự động hoàn toàn có giám sát**  
 **Hạ tầng:** **VPS sẵn có**, chạy 24/7, $0; dashboard realtime theo §7.4  
 **Người thực hiện:** ____________________  
-**Trạng thái tổng:** ⬜ Chưa bắt đầu
+**Trạng thái tổng:** 🟡 Đang thực hiện Phase 0
 
 ---
 
@@ -50,11 +50,11 @@
 
 | Phase | Tên | Thời lượng dự kiến | Trạng thái | Bắt đầu | Kết thúc | Ghi chú |
 |---|---|---|---|---|---|---|
-| 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | ⬜ | | | |
+| 0 | Chuẩn bị tài khoản & môi trường | 2–3 ngày | 🟡 | | | Hạ tầng OK; chờ live key/alert/Tailscale |
 | 1 | B0 — Thu dữ liệu & backtest $500/1x | 5–7 ngày | ⬜ | | | |
 | 2 | B1a — Ingest + Feature + Screener + UI read-only | 4–6 ngày | ⬜ | | | |
 | 3 | B1b — Executor + Reconciler + Watchdog + UI STOP | 6–8 ngày | ⬜ | | | |
-| 4 | B1c — Testnet + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
+| 4 | B1c — Demo Trading + Dry-run 7 ngày | 7–10 ngày | ⬜ | | | |
 | 5 | R1 — Live $500, 2 coin | 2 tuần | ⬜ | | | |
 | 6 | R2 — Live $500, 3 coin | 3–4 tuần | ⬜ | | | |
 | 7 | G — Gate 60–90 ngày | 1 tuần | ⬜ | | | |
@@ -77,21 +77,35 @@
 ### 0.1 Các bước thực hiện
 
 - [x] **0.1.1** Mở/kiểm tra tài khoản Binance, bật 2FA, anti-phishing code.
-- [ ] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP.
-- [ ] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập.
+- [ ] **0.1.2** Tạo **API key chính** (trade): bật Spot + USDⓈ-M Futures; **tắt Withdraw**; whitelist IP. *(chưa có live key; đang dùng demo key)*
+- [ ] **0.1.3** Tạo **API key read-only** riêng cho monitor/reconcile độc lập. *(demo read-only đã có nhưng vẫn đặt được lệnh — xem P0-T02)*
 - [ ] **0.1.4** Nạp **$500**; quy đổi USDT; phân bổ đúng:
   - Spot wallet: **$235**
   - Futures wallet: **$265** (margin $235 + buffer $30)
 - [ ] **0.1.5** Set Futures: **Cross margin**, **1x**, **One-way mode**.
 - [ ] **0.1.6** Mua **BNB riêng** (ngoài $500): $10–15 mỗi ví Spot và Futures để hưởng phí giảm.
-- [ ] **0.1.7** Xác nhận fee tier VIP0 + BNB discount (spot 0,075%; futures taker 0,045%).
-- [ ] **0.1.8** Tạo tài khoản **Testnet Futures** + API key testnet.
-- [ ] **0.1.9** Dựng repo theo cấu trúc đề xuất; `.env` nằm trong `.gitignore`.
-- [ ] **0.1.10** Cấu hình alert: Telegram bot + SMS/email; test bắn thử.
-- [ ] **0.1.11** Cấu hình **VPS sẵn có** để chạy 24/7: user riêng, firewall (chỉ SSH + Tailscale), NTP, `systemd Restart=always`, backup DB ngày.
-- [ ] **0.1.12** Cài **Tailscale** trên VPS + máy cá nhân; xác nhận truy cập nội bộ.
-- [ ] **0.1.13** Cấu hình **dead-man ping ngoài** (dịch vụ khác, không đặt cùng VPS).
-- [ ] **0.1.14** Chốt **alert severity**: P1 (phải xử lý ≤15 phút), P2 (≤24h), P3 (theo tuần).
+- [ ] **0.1.7** Xác nhận fee tier VIP0 + BNB discount (spot 0,075%; futures taker 0,045%). *(demo: 0,02/0,04%)*
+- [x] **0.1.8** Tạo **Demo Trading** + **API key demo** (Spot + USDⓈ-M) — đã đặt/hủy lệnh demo thành công.
+- [x] **0.1.9** Dựng repo theo cấu trúc đề xuất; `.env` nằm trong `.gitignore`.
+- [ ] **0.1.10** Cấu hình alert: Telegram bot + SMS/email; test bắn thử. *(bot `@fr_farming_binance_bot` OK; chưa có chat_id/updates, chưa có SMTP)*
+- [x] **0.1.11** Cấu hình **VPS** chạy 24/7: user `funding`, NTP (chrony), `systemd Restart=always`, backup DB ngày. *(firewall: ngoại lệ vì VPS dùng chung — xem P0-T09)*
+- [ ] **0.1.12** Cài **Tailscale** VPS + máy cá nhân; xác nhận truy cập nội bộ. *(đã cài trên VPS, chờ đăng nhập)*
+- [ ] **0.1.13** Cấu hình **dead-man ping ngoài** (dịch vụ khác, không đặt cùng VPS). *(chờ URL dịch vụ ngoài)*
+- [x] **0.1.14** Chốt **alert severity**: P1 (phải xử lý ≤15 phút), P2 (≤24h), P3 (theo tuần).
+
+### 0.1a Ba loại API key
+
+| Key | Dùng cho | Quyền bật | Không được bật |
+|---|---|---|---|
+| **Trade** | Executor đặt/hủy lệnh, transfer buffer | Reading + Spot & Margin + Futures (+ Universal Transfer khi Phase 3) | Withdraw |
+| **Read-only** | Monitor/reconciler/dashboard | Chỉ Reading | Trading, Withdraw, Transfer |
+| **Demo** | Chạy thử trên ví ảo | Reading + Spot + Futures | Không dùng cho live |
+
+- Tạo live key: `binance.com` → Account → API Management → **System generated** (HMAC SHA256), bật đúng bảng, **Withdraw OFF**, whitelist IPv4 VPS.
+- Tạo demo key: `demo.binance.com` → avatar → API Management (`demo.binance.com/en/my/settings/api-management`).
+- Demo dùng endpoint `demo-api.binance.com` / `demo-fapi.binance.com`; key demo không dùng được trên live và ngược lại.
+- **Demo không đo được** slippage/fill/funding thật; chỉ dùng kiểm tra kỹ thuật (order lifecycle, rollback, reconcile).
+- `.env` hiện tại: `BINANCE_USE_DEMO=true`, chỉ có demo keys; chưa có live trade/read-only key.
 
 ### 0.2 Cấu trúc repo đề xuất
 
@@ -121,40 +135,40 @@ funding-bot/
 
 ### 0.3 Kết quả cần đạt
 
-- [ ] Ảnh chụp màn hình: Spot $235, Futures $265, Cross, 1x.
-- [ ] API key chính **không** có quyền rút tiền; key read-only **không** đặt được lệnh.
-- [ ] Alert test tới điện thoại trong < 10 giây.
-- [ ] VPS truy cập được qua Tailscale; `systemd` tự restart khi kill process; backup DB chạy và restore thử được.
-- [ ] Không có secret nào trong git (đã kiểm tra `git grep`).
-- [ ] **Không tạo `ui/`, executor, screener ở phase này.**
+- [ ] Ảnh chụp màn hình: Spot $235, Futures $265, Cross, 1x. *(chưa có live; demo 5000/5020)*
+- [ ] API key chính **không** có quyền rút tiền; key read-only **không** đặt được lệnh. *(live chưa có; demo read-only vẫn trade được)*
+- [ ] Alert test tới điện thoại trong < 10 giây. *(thiếu chat_id/updates)*
+- [ ] VPS truy cập được qua Tailscale; `systemd` tự restart khi kill process; backup DB chạy và restore thử được. *(systemd + backup OK; Tailscale chờ đăng nhập)*
+- [x] Không có secret nào trong git (đã kiểm tra `git grep`).
+- [x] **Không tạo `ui/`, executor, screener ở phase này.**
 
 ### 0.4 Checklist test
 
 | ID | Test | Cách kiểm | Kỳ vọng | Kết quả | Ghi chú |
 |---|---|---|---|---|---|
-| P0-T01 | Quyền rút bị tắt | Gọi API withdrawal bằng key chính | 401/403 | ⬜ | |
-| P0-T02 | Key read-only không trade | Gọi API đặt lệnh bằng key read-only | 401/403 | ⬜ | |
-| P0-T03 | Số dư đúng | GET balance Spot/Futures | 235 / 265 USDT | ⬜ | |
-| P0-T04 | Cross + 1x | Kiểm tra app + API `positionRisk` | Cross, leverage 1 | ⬜ | |
-| P0-T05 | BNB discount | Xem fee tier / thử lệnh nhỏ | Spot 0,075%; Fut 0,045% | ⬜ | |
-| P0-T06 | Alert Telegram | Bắn test message | Nhận < 10s | ⬜ | |
-| P0-T07 | Alert SMS/email | Bắn test message | Nhận < 60s | ⬜ | |
-| P0-T08 | Time drift | So `time` API với local | Lệch < 1s | ⬜ | |
-| P0-T09 | Firewall VPS | Scan port từ ngoài | Chỉ SSH/Tailscale; 8080 không lộ | ⬜ | |
-| P0-T10 | Systemd restart | Kill process bot | Tự lên lại < 10s | ⬜ | |
-| P0-T11 | Secret không vào git | `git grep -i "api_key\|secret"` | 0 kết quả | ⬜ | |
-| P0-T12 | Testnet hoạt động | Đặt/hủy 1 lệnh testnet | Khớp bình thường | ⬜ | |
-| P0-T13 | Backup DB | Chạy backup + restore thử | File có, restore OK | ⬜ | |
+| P0-T01 | Quyền rút bị tắt | Gọi API withdrawal bằng key chính | 401/403 | ⏭️ | Chưa có live key; demo không có chức năng rút |
+| P0-T02 | Key read-only không trade | Gọi API đặt lệnh bằng key read-only | 401/403 | ❌ | Demo read-only **vẫn đặt được lệnh** (order 28694503202, đã hủy). Local `_write_guard` đã chặn; live chưa test |
+| P0-T03 | Số dư đúng | GET balance Spot/Futures | 235 / 265 USDT | ⏭️ | Demo 5000 / 5020 USDT; live chưa nạp |
+| P0-T04 | Cross + 1x | Kiểm tra app + API `positionRisk` | Cross, leverage 1 | 🟡 | Demo BTCUSDT: leverage=1, margin=cross; live chưa xác nhận |
+| P0-T05 | BNB discount | Xem fee tier / thử lệnh nhỏ | Spot 0,075%; Fut 0,045% | ⏭️ | Demo futures maker 0,02% / taker 0,04%; spot fee endpoint 404 |
+| P0-T06 | Alert Telegram | Bắn test message | Nhận < 10s | ⬜ | Bot `@fr_farming_binance_bot` getMe OK; 0 updates → chưa có chat_id |
+| P0-T07 | Alert SMS/email | Bắn test message | Nhận < 60s | ⏭️ | Chưa cấu hình SMTP/email |
+| P0-T08 | Time drift | So `time` API với local | Lệch < 1s | ✅ | Local 227 ms; VPS -64 ms |
+| P0-T09 | Firewall VPS | Scan port từ ngoài | Chỉ SSH/Tailscale; 8080 không lộ | ❌ | VPS dùng chung: 443/1508 mở cho `cors-prod`; 8080 đóng. Không áp firewall để tránh sập dịch vụ khác |
+| P0-T10 | Systemd restart | Kill process bot | Tự lên lại < 10s | ✅ | PID 1301809 → 1301994, service active |
+| P0-T11 | Secret không vào git | `git grep -i "api_key\|secret"` | 0 kết quả | ✅ | 0 secret thật; chỉ placeholder trong `.env.example`; `.env` không tracked |
+| P0-T12 | Demo Trading hoạt động | Đặt/hủy 1 lệnh demo | Khớp bình thường | ✅ | Order 28694503206: NEW → CANCELED; query khớp |
+| P0-T13 | Backup DB | Chạy backup + restore thử | File có, restore OK | ✅ | `funding-20261125T024621Z.db.gz`, restore value=42 |
 
 ### 0.5 Kết quả test (biên bản)
 
 | Hạng mục | Giá trị |
 |---|---|
-| Ngày chạy | |
-| Người chạy | |
-| Pass / Fail | __ / 13 |
-| Bằng chứng (link log/ảnh/commit) | |
-| Quyết định | ⬜ Đạt phase 0 / ⬜ Chạy lại / ⬜ Dừng |
+| Ngày chạy | 25/11/2026 |
+| Người chạy | OpenCode agent (user review) |
+| Pass / Fail | 5 ✅ / 2 ❌ / 1 🟡 / 1 ⬜ / 4 ⏭️ (tổng 13) |
+| Bằng chứng (link log/ảnh/commit) | VPS `/opt/funding-bot`, systemd `funding-heartbeat`, backup `funding-20261125T024621Z.db.gz`; demo order `28694503206`; P0-T02 order `28694503202` (đã hủy); commit Phase 0 |
+| Quyết định | ⬜ Đạt phase 0 / ✅ **Chạy lại** (chưa đạt: live key/fund, alert chat_id, Tailscale, dead-man) / ⬜ Dừng |
 
 ### 0.6 Ghi chú & rủi ro
 
@@ -163,6 +177,11 @@ funding-bot/
 - **Không dùng API key có quyền rút** cho bot, kể cả khi tiện.
 - **VPS là single point of failure.** VPS chết = bot + UI cùng mất → bắt buộc dead-man ping ngoài + backup DB ngày (§12.3).
 - **UI không tạo ở phase này.** Chỉ `.env`, config và script check key; UI bắt đầu Phase 2.
+- **VPS dùng chung:** đang chạy `cors-prod` (Caddy 80/443, app 1508–1599, MySQL), `binance-demo-server` (127.0.0.1:8081), onedash/vector/vmagent. Không bật UFW/đóng port để tránh sập dịch vụ khác; service của dự án phải bind `127.0.0.1` và đi qua Tailscale.
+- **Demo read-only key chưa đủ an toàn:** P0-T02 cho thấy key demo read-only vẫn đặt được lệnh. Đã thêm `_write_guard` ở client để chặn local; vẫn phải tạo live read-only và test lại trước khi chạy tiền thật.
+- **Demo không hỗ trợ** `apiRestrictions` và `spot tradeFee` (404) → không kiểm tra được quyền rút/phí spot trên demo; phải test bằng live key.
+- **Funding trên demo là dữ liệu mô phỏng** (BTCUSDT trả flat 0,0100%) → không dùng demo để backtest/research; chỉ dùng public live data.
+- **Deploy VPS:** `/opt/funding-bot` (user `funding`), venv `.venv`, `.env` mode 600; systemd `funding-heartbeat` (placeholder) và `funding-backup.timer` 03:15 UTC. Khi có bot thật, thay `ExecStart` của heartbeat, giữ `Restart=always`.
 
 ---
 
@@ -335,7 +354,7 @@ funding-bot/
 
 - [ ] Không có lệnh trùng khi retry/timeout.
 - [ ] Leg 2 fail → leg 1 được đóng trong ≤ 60 giây, có log.
-- [ ] Reconcile diff = 0 liên tục 24h trên testnet.
+- [ ] Reconcile diff = 0 liên tục 24h trên Demo Trading.
 - [ ] Kill switch + dead-man hoạt động trong ≤ 5 phút kể từ sự cố giả lập.
 - [ ] Không có đường nào để bot mở > $125/order hoặc > 3 coin.
 - [ ] Mọi alert P1 tới điện thoại trong < 15 giây.
@@ -393,17 +412,17 @@ funding-bot/
 
 ---
 
-## PHASE 4 — B1c: TESTNET + DRY-RUN 7 NGÀY
+## PHASE 4 — B1c: DEMO TRADING + DRY-RUN 7 NGÀY
 
-**Mục tiêu:** chạy đúng luồng trên testnet và dry-run dữ liệu thật 7 ngày, đo slippage/fill trước khi dùng tiền thật.
+**Mục tiêu:** chạy đúng luồng trên **Demo Trading** (ví ảo, gần như cùng tính năng live) và dry-run dữ liệu thật 7 ngày, đo slippage/fill trước khi dùng tiền thật.
 
 **Tham chiếu kế hoạch:** §8.3 (điều kiện bật live), §11 B1, §12.5 (ngân sách thiệt hại).
 
-**Giải thích cơ bản:** Testnet kiểm tra kỹ thuật; dry-run kiểm tra quyết định trên thị trường thật mà không gửi lệnh. Đây là lần cuối có thể sửa miễn phí.
+**Giải thích cơ bản:** Demo Trading kiểm tra kỹ thuật (order lifecycle, rollback, reconcile) trên ví ảo; dry-run kiểm tra quyết định trên thị trường thật mà không gửi lệnh. Demo không đo được slippage/fill thật — phần đó để dry-run + live $500.
 
 ### 4.1 Các bước thực hiện
 
-- [ ] **4.1.1** Chạy toàn bộ luồng trên testnet: vào 2 leg, rollback, exit, transfer.
+- [ ] **4.1.1** Chạy toàn bộ luồng trên **Demo Trading**: vào 2 leg, rollback, exit, transfer (dùng `BINANCE_USE_DEMO=true`, `DRY_RUN=false`, `LIVE_TRADING_ENABLED=false`).
 - [ ] **4.1.2** Chạy **dry-run ≥ 7 ngày** trên dữ liệu thật: bot quyết định nhưng **không gửi lệnh**; ghi giá "nếu vào thì khớp nào".
 - [ ] **4.1.3** Ghi log từng episode giấy: coin, thời điểm, size, giá dự kiến, giá thực tế tại thời điểm đó, funding dự kiến.
 - [ ] **4.1.4** Đo slippage giả định vs model 0,1%/side.
@@ -453,7 +472,8 @@ funding-bot/
 
 ### 4.5 Ghi chú & rủi ro
 
-- Dry-run **không được** gửi lệnh thật; kiểm tra API key đang ở chế độ read-only hoặc testnet.
+- Dry-run **không được** gửi lệnh thật; kiểm tra API key đang ở chế độ read-only **hoặc** `BINANCE_USE_DEMO=true` với key demo.
+- Demo không thay thế đo lường thật: slippage/fill/funding chỉ đo được ở live $500; không nới gate vì "demo chạy đẹp".
 - Nếu slippage thực tế > 0,2%/side → quay lại chọn coin thanh khoản hơn, không hạ chuẩn.
 - Nếu uptime < 99% → sửa hạ tầng trước khi live.
 
@@ -787,6 +807,7 @@ ui_stop_requires_confirm: true
 |---|---|---|
 | 1.0 | 24/11/2026 | Tạo task từ kế hoạch v2.2: $500, 1x, 3 coin, L3; 9 phase; checklist test + biên bản kết quả từng phase |
 | 1.1 | 24/11/2026 | Thêm **UI realtime trên VPS sẵn có** (§7.4): UI read-only Phase 2, positions/PnL/STOP Phase 3; bỏ phương án UPS/4G; thêm **quy tắc cấm tạo file trước phase**; cập nhật test (0: 13, 2: 16, 3: 24, 4: 13, 5: 11, 7: 12, 8: 11) |
+| 1.2 | 25/11/2026 | Chuyển Testnet → **Demo Trading**; thêm §0.1a (3 loại key); triển khai VPS `/opt/funding-bot` (user funding, systemd, backup); ghi kết quả P0 5✅/2❌/1🟡/1⬜/4⏭️; thêm guard read-only + ngoại lệ firewall VPS dùng chung |
 
 ---
 

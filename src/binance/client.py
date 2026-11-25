@@ -206,12 +206,18 @@ class BinanceClient:
         return self._signed("GET", "spot", "/sapi/v1/asset/tradeFee", params)
 
     # ---------- private: settings ----------
+    def _write_guard(self, action: str) -> None:
+        if self.readonly:
+            raise BinanceAPIError(0, None, f"Read-only client — không {action}")
+
     def set_leverage(self, symbol: str, leverage: int = 1) -> dict[str, Any]:
+        self._write_guard("đổi leverage")
         return self._signed(
             "POST", "futures", "/fapi/v1/leverage", {"symbol": symbol, "leverage": leverage}
         )
 
     def set_margin_type(self, symbol: str, margin_type: str = "CROSSED") -> dict[str, Any]:
+        self._write_guard("đổi margin type")
         try:
             return self._signed(
                 "POST",
@@ -227,6 +233,7 @@ class BinanceClient:
 
     def universal_transfer(self, asset: str, amount: float, transfer_type: str) -> dict[str, Any]:
         """transfer_type: MAIN_UMFUTURE (Spot→Futures) | UMFUTURE_MAIN (Futures→Spot)."""
+        self._write_guard("chuyển tiền")
         return self._signed(
             "POST",
             "spot",
@@ -236,6 +243,7 @@ class BinanceClient:
 
     # ---------- private: orders (có guard) ----------
     def _order_guard(self) -> None:
+        self._write_guard("gửi/hủy lệnh")
         if self.settings.dry_run:
             raise BinanceAPIError(0, None, "DRY_RUN=true — không gửi lệnh thật")
         if not (self.settings.live_trading_enabled or self.settings.use_demo):
@@ -277,7 +285,9 @@ class BinanceClient:
             params["orderId"] = order_id
         if client_order_id:
             params["origClientOrderId"] = client_order_id
+        self._write_guard("hủy lệnh")
         return self._signed("DELETE", "futures", "/fapi/v1/order", params)
 
     def cancel_all_futures_orders(self, symbol: str) -> dict[str, Any]:
+        self._write_guard("hủy lệnh")
         return self._signed("DELETE", "futures", "/fapi/v1/allOpenOrders", {"symbol": symbol})
