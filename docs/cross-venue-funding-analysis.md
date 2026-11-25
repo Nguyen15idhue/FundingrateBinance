@@ -210,6 +210,79 @@ Screen 16 mã perp-only funding cao nhất của Binance trên 5 sàn (snapshot 
 - Không dồn vốn vào Bitget/Gate/MEXC chỉ vì spread cao.
 - Không hạ ngưỡng APR/net để có trades; sẽ lặp lại lỗi Phase 1.
 
+## 10. Tiền ở 2 sàn: các cách kiếm tốt hơn — xếp hạng
+
+### 10.1 Cách tốt nhất: Spot + perp cross-venue
+
+Thay vì 2 perp, dùng **long Spot trên sàn B + short perp trên Binance**. Spot leg không trả funding → ăn **toàn bộ funding Binance**, không chỉ phần chênh.
+
+Ví dụ 30 ngày, cost 0,5%, 3 coin, $500:
+
+| Coin | Spot ở đâu | Funding Binance 30d | Net APR vốn* | $/tháng | Ghi chú |
+|---|---|---:|---:|---:|---|
+| PIEVERSE | **Bybit** / Gate / MEXC | 29,4% | ~10,9% | ~$4,5 | Bybit Tier-1, spot $8,1M/ngày |
+| TA | **Bybit** / Gate / MEXC | 38,1% | ~15,0% | ~$6,3 | Bybit spot $0,73M/ngày — kiểm tra depth |
+| EVAA | Bitget / Gate / MEXC | 53,2% | ~22,1% | ~$9,2 | Venue risk cao hơn |
+| AVAAI | Gate / MEXC | 40,8% | ~16,3% | ~$6,8 | Venue risk |
+| INX | Gate / MEXC | 25,7% | ~9,2% | ~$3,8 | Venue risk |
+| PHAROS | **Không có Spot** | 33,0% | perp–perp ~7,0% | ~$2,9 | Chỉ perp–perp |
+
+*30 ngày, cost 0,5%, hệ số vốn 0,47; chưa tính basis.
+
+**Điểm mạnh:** ăn full funding (29–53% ở regime hiện tại), spot leg không funding, dễ hiểu.
+**Điểm yếu:** vẫn 2 sàn; spot custody/thanh khoản; basis spot–perp; nếu funding flip âm phải thoát.
+
+### 10.2 Fallback: Perp–perp cross-venue
+
+Dùng khi coin **không có Spot** (PHAROS, XMR) hoặc khi funding sàn kia cao hơn hẳn (INX–Gate):
+
+| Cặp | Spread 30d | Net APR vốn* | $/tháng | Ghi chú |
+|---|---:|---:|---:|---|
+| INX–Gate | 62,6pp | ~27,1% | ~$11,3 | Gate funding cao hơn; venue risk |
+| EVAA–Bitget | 42,2pp | ~17,5% | ~$7,3 | Bitget risk |
+| AVAAI–Bybit | 29,4pp | ~11,5% | ~$4,8 | Tier-1 |
+| TA–Bybit | 26,5pp | ~10,2% | ~$4,2 | Tier-1 |
+| PHAROS–Bybit | 19,7pp | ~7,0% | ~$2,9 | Không spot |
+| JCT–OKX | 50,7pp | ~21,5% | ~$9,0 | Lịch sử ngắn, OKX risk |
+
+*30 ngày, cost 0,4%, hệ số 0,47.
+
+### 10.3 Xếp hạng risk-adjusted
+
+| Hạng | Cách | Kỳ vọng | Rủi ro | Độ phức tạp | Kết luận |
+|---|---|---|---|---|---|
+| **1** | **Spot + perp cross-venue** (Binance perp + Bybit/Gate spot) | 5–22% APR tùy regime | Trung bình–cao (2 sàn, spot custody, basis) | Trung bình | **Tốt nhất nếu spot đủ thanh khoản** |
+| **2** | **Perp–perp cross-venue dynamic** | 5–27% trong cửa sổ tốt; 1–4% bình thường | Cao (basis/venue/transfer) | Cao | Fallback cho coin không spot |
+| **3** | **USDT flexible earn trên idle collateral** | 3–8% APR | Thấp–trung bình (counterparty) | Thấp | **Dùng cho buffer/idle**, không phải edge chính |
+| 4 | Basis/quarterly futures cross-venue | Episodic, 5–15% | Trung bình | Cao | Chỉ khi có basis rõ |
+| 5 | Same-exchange spot+perp majors | 2–6% | Thấp | Thấp | Funding thấp, thường không đáng |
+| 6 | Lending/borrow rate arb | Biến động | Trung bình–cao | Cao | Không phù hợp $500 |
+| 7 | Grid/market making | Không delta-neutral | Cao | Cao | **Loại** cho mục tiêu funding |
+| 8 | Dual investment/structured | 5–15% headline | Lockup/principal | Thấp | **Không** dùng vốn vận hành |
+| 9 | 2x leverage | Gấp đôi return | Gấp đôi DD/liquidation | Thấp | **Không** ở $500 |
+
+### 10.4 Cấu hình 2 sàn khuyến nghị
+
+**Nếu chỉ dùng 2 sàn: Binance + Bybit**
+- Spot + perp: PIEVERSE, TA (Bybit spot).
+- Perp–perp: AVAAI, EVAA, PHAROS (Bybit perp).
+- 3 coin, 1x, buffer 15–20%; idle USDT để flexible earn.
+- Kỳ vọng: 5–10%/năm regime bình thường, 10–15% trong cửa sổ tốt.
+
+**Nếu chấp nhận sàn thứ 3 (Gate/Bitget/MEXC)**
+- Thêm spot + perp cho EVAA, AVAAI, INX.
+- Tăng return nhưng tăng counterparty/liquidity risk; giới hạn ≤20% vốn/venue nhỏ.
+
+### 10.5 Nguyên tắc tối đa hóa
+
+1. **Tính cả 2 cấu trúc cho mỗi coin**: spot+perp vs perp–perp; chọn net cao hơn **sau phí, slippage, venue risk**.
+2. **Chỉ vào khi spread đủ lớn**: 30d ≥25pp (perp–perp) hoặc funding Binance ≥25–30% (spot+perp); hold 30 ngày.
+3. **Ưu tiên Tier-1**: Binance + Bybit; venue nhỏ chỉ khi spread bù được rủi ro.
+4. **Kiểm tra depth spot** cho size $78; TA spot Bybit mỏng hơn PIEVERSE.
+5. **Basis-aware**: tránh long spot/perp khi basis bất lợi >0,2–0,3%; exit nếu basis z >3σ.
+6. **Idle yield**: giữ buffer trong flexible earn, nhưng phải rút được ngay khi cần margin.
+7. **Không leverage, không chase spread snapshot, không hạ chuẩn.**
+
 ---
 
 *Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 30d cho các cặp mở rộng. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*
