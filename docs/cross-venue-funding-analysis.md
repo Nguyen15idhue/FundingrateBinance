@@ -1,0 +1,121 @@
+# Phân tích cross-exchange funding arbitrage (perp–perp)
+
+**Ngày:** 25/11/2026  
+**Bối cảnh:** Phase 1 spot+perp thất bại vì 4 mã funding cao (EVAA, AVAAI, PIEVERSE, PHAROS) không có Spot trên Binance.  
+**Câu hỏi:** có thể long perp sàn A + short perp sàn B cùng coin để ăn chênh funding không?
+
+## 1. Kết luận ngắn
+
+- **Kỹ thuật: khả thi.** Cả 4 mã đều có perp trên Bybit; một số có thêm Bitget/OKX/Gate/MEXC.
+- **Kinh tế: biên, chưa đủ để thay thế kế hoạch hiện tại.** Chênh funding Binance–Bybit trung bình 180 ngày chỉ **8,5–13,1pp/năm**; sau phí, slippage và hệ số 2 leg, net trên vốn thường **0–4%/năm**, dưới mục tiêu 9%.
+- Chênh 14 ngày hiện tại lớn hơn (12–49pp) nhưng **không bền**; chỉ một số cửa sổ đủ lời.
+- **Đề xuất:** làm **Phase 1b cross-venue backtest 6–12 tháng** với Binance + Bybit trước; chỉ cân nhắc Bitget/OKX/Gate/MEXC sau khi định lượng rủi ro venue. Chưa xây automation.
+
+## 2. Cơ chế và công thức
+
+Hai lệnh cùng coin, cùng size:
+- **Short perp sàn A** (funding cao hơn) — nhận funding.
+- **Long perp sàn B** (funding thấp hơn) — trả funding.
+- Delta giá gần 0; PnL chủ yếu từ **chênh funding** + **chênh basis giữa 2 sàn**.
+
+```text
+funding_net = funding_nhận_A − funding_trả_B        (trên cùng notional)
+pnl_basis   ≈ N × (basis_exit − basis_entry)         (basis = P_B/P_A − 1)
+pnl         = funding_net + pnl_basis − fees − slippage
+```
+
+Nếu long sàn B rẻ hơn (basis âm) và basis hội tụ về 0, long B/short A có thêm lời một lần; ngược lại là rủi ro.
+
+**Quy đổi APR trên vốn** (3 coin, $78/leg/vị thế, 2 leg, buffer $30):
+
+```text
+net_APR_vốn ≈ 0,47 × (differential_APR − cost_roundtrip × 365 / holding_days)
+```
+
+Với cost round-trip 0,35–0,50% (4 lần taker + slippage):
+- Giữ 14 ngày: cần differential **~28–32pp** để đạt 9%/năm trên vốn.
+- Giữ 30 ngày: cần **~23–25pp**.
+- Giữ 60 ngày: cần **~21–22pp**.
+
+## 3. Dữ liệu thực tế
+
+### 3.1 Snapshot 14 ngày (25/11/2026)
+
+APR 14 ngày tính bằng tổng funding/14 ngày × 365; basis so với Binance.
+
+| Symbol | Binance APR | Bybit APR | Bitget | OKX | Gate | MEXC | Basis Bybit |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| EVAA | 60,2% | 36,7% | 11,0% | — | 19,0% | 59,9% | −0,382% |
+| AVAAI | 38,1% | 11,8% | — | — | 25,8% | 37,2% | −0,066% |
+| PIEVERSE | 33,2% | 20,7% | 18,1% | 12,1% | 9,4% | 33,2% | +0,081% |
+| PHAROS | 34,7% | 11,3% | — | — | — | 34,9% | −0,062% |
+
+- Snapshot cho thấy chênh lớn: EVAA–Bitget ~49pp, AVAAI–Bybit ~26pp, PHAROS–Bybit ~23pp.
+- Nhưng đây chỉ là **một thời điểm**, không phải edge bền.
+
+### 3.2 Differential 180 ngày: Binance − Bybit
+
+| Symbol | Mean | Median | P10 | P90 | % ngày >9,1pp | % ngày >28pp |
+|---|---:|---:|---:|---:|---:|---:|
+| EVAA | −2,9% | −2,5% | −20,5% | +12,4% | 18% | 0% |
+| AVAAI | **+13,1%** | +10,8% | +3,2% | +27,9% | 57% | 9% |
+| PIEVERSE | +8,5% | +8,1% | +3,0% | +13,8% | 41% | 0% |
+| PHAROS | **+12,0%** | +14,5% | −0,5% | +34,0% | 75% | 14% |
+
+- EVAA trung bình **âm** (Bybit funding cao hơn Binance); snapshot 14 ngày đã đảo chiều.
+- AVAAI/PHAROS khá hơn nhưng mean 12–13pp vẫn dưới ngưỡng 23–25pp cho hold 30 ngày.
+- `% ngày >28pp` chỉ 0–14% → edge không đủ thường xuyên.
+
+### 3.3 Differential 90 ngày: Binance − Bitget (chỉ 2 mã có lịch sử)
+
+| Symbol | Mean | Median | P10 | P90 | % ngày >9,1pp | % ngày >28pp |
+|---|---:|---:|---:|---:|---:|---:|
+| EVAA | **+18,9%** | +17,2% | −3,0% | +40,2% | 72% | 28% |
+| PIEVERSE | +9,3% | +10,9% | +0,3% | +18,3% | 57% | 0% |
+
+- EVAA–Bitget hấp dẫn hơn về số liệu, nhưng Bitget là venue rủi ro cao hơn, lịch sử chỉ 90 ngày, thanh khoản mỏng hơn.
+- Không nên dồn vốn lớn vào venue nhỏ khi chưa có backtest 6–12 tháng.
+
+## 4. Rủi ro chính (khác spot+perp)
+
+| Rủi ro | Ảnh hưởng | Giảm thiểu |
+|---|---|---|
+| **Basis giữa 2 sàn** | 0,3–0,4% hiện tại; đủ xóa 1 tháng funding nếu đi ngược | Entry chỉ khi basis thuận/trung tính; stop khi basis z > 3σ |
+| **Thanh lý 1 leg** | Giá một sàn chạy mạnh → leg còn lại mất hedge | 1x, buffer 15–20% (không phải 6%), theo dõi margin từng sàn |
+| **Funding flip** | Differential đảo dấu; lỗ nhanh | Exit khi differential <10pp hoặc âm 2 kỳ |
+| **Lệch giờ/interval** | Binance/Bybit 4h; Gate 8h; dòng tiền lệch | Chuẩn hóa theo tổng 24h/14d, không theo 1 kỳ |
+| **Counterparty** | Bitget/Gate/MEXC rủi ro cao hơn Binance/Bybit | Ưu tiên Binance+Bybit; giới hạn vốn/venue |
+| **Chuyển tiền** | Phí rút, mạng, trễ khi cần top-up | Giữ collateral 2 bên; hạn chế transfer |
+| **Execution 2 leg** | Một leg khớp, leg kia fail → lệch | Executor retry/rollback, `clientOrderId` (Phase 3) |
+| **Vận hành** | 2 account, 2 API key, IP whitelist, clock sync, reconcile | Thêm adapter + reconciler cross-venue |
+| **Thuế/ KYC/ vùng** | Khác nhau giữa sàn | Kiểm tra trước khi mở tài khoản |
+
+## 5. So sánh 3 phương án
+
+| Phương án | Ưu | Nhược | Kết luận |
+|---|---|---|---|
+| Spot + perp Binance | 1 sàn, ít rủi ro counterparty | Không có Spot cho coin funding cao; Phase 1 fail | **Không khả thi** với universe hiện tại |
+| **Perp–perp cross-venue** | Mở được universe perp-only; delta gần 0 | Thêm basis/venue/transfer risk; differential biên | **Khả thi kỹ thuật, kinh tế biên** |
+| Perp-only | Đơn giản, không cần sàn 2 | Mất delta-neutral; rủi ro giá | **Không khuyến nghị** |
+
+## 6. Đề xuất Phase 1b
+
+Trước khi động vào Phase 2:
+
+1. **Venue:** Binance + Bybit (Tier-1) là bắt buộc; Bitget/OKX/Gate/MEXC là optional sau khi có số liệu.
+2. **Dữ liệu:** 6–12 tháng funding + 4h price/basis + fee + depth + funding interval cho 4 mã (và mở rộng danh sách perp-only).
+3. **Backtest:** chọn hướng động (short sàn funding cao), entry khi differential ≥30pp (14d) hoặc ≥24pp (30d), hold 30–60 ngày, tính basis PnL, phí 4 lần, slippage, transfer delay, venue outage.
+4. **Gate:** net APR ≥9% trên vốn; DD ≤4%; ≥70% tháng dương; deployment ≥50%; chỉ khi đó mới xây automation.
+5. **Pilot nếu pass:** tối đa 3 coin, 1x, buffer 15–20%, ưu tiên Binance+Bybit; không dồn >20% vốn vào venue nhỏ.
+
+## 7. Kỳ vọng ở $500
+
+Với differential trung bình 12–13pp (AVAAI/PHAROS), hold 30 ngày, cost 0,4%:
+- net ≈ 0,47 × (13 − 4,9) ≈ **3,8%/năm** ≈ **$1,6/tháng**.
+- Chỉ các cửa sổ differential >28pp mới đạt ~9–11%/năm; nhưng chỉ 9–14% số ngày.
+
+Vì vậy cross-venue **chưa đủ hấp dẫn ở $500** so với công vận hành; đáng cân nhắc lại ở $2.000+ hoặc nếu tìm được cặp venue/coin có differential bền >25pp.
+
+---
+
+*Số liệu snapshot 25/11/2026; 180d Binance–Bybit; 90d Binance–Bitget. Chưa phải backtest đầy đủ cross-venue — cần Phase 1b trước khi kết luận đầu tư.*

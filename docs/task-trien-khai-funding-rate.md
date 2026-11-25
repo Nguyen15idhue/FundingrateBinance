@@ -258,6 +258,7 @@ funding-bot/
 - **Deployment rate thấp là kết quả hợp lệ**, không phải lỗi. Thị trường funding hiện tại median ~4,2%/năm → đứng ngoài là bình thường.
 - **Phát hiện cấu trúc (quan trọng):** 4 mã tham chiếu EVAA/AVAAI/PIEVERSE/PHAROS đều **không có cặp Spot USDT** → không thể hedge delta-neutral. Universe tradable (Spot + Futures, fut vol ≥$5M) chỉ 104 symbol; screen 283 symbol mở rộng hiện tại cho **0 ứng viên** đạt 20–60% APR; backtest 180 ngày chỉ có **1 episode** (牛来USDT, 1 ngày).
 - **Không hạ chuẩn để có kết quả đẹp.** Nếu muốn tiếp tục: (a) thêm venue Spot khác cho coin perp-only (cross-exchange) hoặc margin/borrow short spot; (b) chấp nhận universe hẹp và chờ regime funding; (c) đổi sang perp-only — **không khuyến nghị** vì mất delta-neutral.
+- **Phân tích cross-venue:** xem `docs/cross-venue-funding-analysis.md` — perp–perp Binance+Bybit khả thi kỹ thuật (cả 4 mã có Bybit), nhưng differential 180 ngày chỉ 8,5–13,1pp → kinh tế biên; cần Phase 1b trước khi thay đổi chiến lược.
 - **Nếu Phase 1 fail: không chuyển sang xây automation.** Quay lại bộ lọc/cấu hình/universe. **(Đã fail → dừng trước Phase 2.)**
 
 ---
